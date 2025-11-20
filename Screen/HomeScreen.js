@@ -118,6 +118,13 @@ export default function HomeScreen({ navigation }) {
   return (
     // --- (Gunakan style LOKAL untuk container) ---
     <View style={localStyles.container}>
+      <View style={{ marginBottom: 20 }}>
+        <Button
+          title="Lihat Tampilan Graph (Tanpa Duplikat)"
+          color="#6200ee"
+          onPress={() => navigation.navigate('SkillTree')}
+        />
+      </View>
       <TextInput
         style={globalStyles.input} // <-- Gunakan global
         placeholder="Nama Tugas Baru"
