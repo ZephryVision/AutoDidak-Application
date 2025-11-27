@@ -6,6 +6,7 @@ import { createUserWithEmailAndPassword } from "firebase/auth";
 
 import { globalStyles, Colors } from '../Styles/GlobalStyles';
 
+
 // Terima prop 'navigation'
 export default function RegisterScreen({ navigation }) {
   const [email, setEmail] = useState('');

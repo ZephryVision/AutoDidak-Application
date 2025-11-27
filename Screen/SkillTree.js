@@ -1,374 +1,399 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Button } from 'react-native';
-import { collection, onSnapshot, query, writeBatch, doc, getDocs } from "firebase/firestore";
+import React, { useState } from 'react';
+import { View, StyleSheet, Dimensions, Alert, Text } from 'react-native';
+import Svg, { Circle, Line, Text as SvgText, G } from 'react-native-svg';
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from 'react-native-gesture-handler';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+} from 'react-native-reanimated';
 
-import { db, auth } from '../firebaseConfig';
-import { Colors } from '../Styles/GlobalStyles';
+const { width, height } = Dimensions.get('window');
 
-// INI ADALAH "BLUEPRINT" SKILL TREE ANDA
-// Kita pakai Custom ID (id yang kita tentukan sendiri) supaya mudah relasinya.
-// === OPSI 1: SKILL UMUM (Data Lama) ===
-const LAYOUT_GENERAL = [
-    { id: "node_1", label: "Skill Dasar", parents: [] },
-    { id: "node_2", label: "Teori A", parents: ["node_1"] },
-    { id: "node_3", label: "Teori B", parents: ["node_1"] },
-    { id: "node_4", label: "Praktek Gabungan", parents: ["node_2", "node_3"] },
-    { id: "node_5", label: "Proyek Akhir", parents: ["node_4"] },
+const skillsData = [
+  {
+    id: 'orientasi',
+    name: 'Orientasi Awal: Algoritma & Pemrograman',
+    unlocked: true,
+    children: ['algoritma_dasar', 'pemrograman_dasar'],
+  },
+  {
+    id: 'algoritma_dasar',
+    name: 'Dasar Pemikiran Algoritmik',
+    unlocked: false,
+    children: ['representasi_algoritma', 'struktur_dasar_algoritma'],
+  },
+  {
+    id: 'representasi_algoritma',
+    name: 'Representasi Algoritma (Flowchart & Pseudocode)',
+    unlocked: false,
+    children: [],
+  },
+  {
+    id: 'struktur_dasar_algoritma',
+    name: 'Struktur Dasar Algoritma (Sequential, Selection, Repetition)',
+    unlocked: false,
+    children: ['dasar_pemrograman'],
+  },
+  {
+    id: 'pemrograman_dasar',
+    name: 'Dasar Pemrograman',
+    unlocked: false,
+    children: ['variabel_tipe_data', 'percabangan', 'perulangan'],
+  },
+  {
+    id: 'variabel_tipe_data',
+    name: 'Variabel dan Tipe Data',
+    unlocked: false,
+    children: ['operator'],
+  },
+  {
+    id: 'operator',
+    name: 'Operator (Aritmetika, Relasional, Logika)',
+    unlocked: false,
+    children: ['percabangan'],
+  },
+  {
+    id: 'percabangan',
+    name: 'Percabangan (If-Else, Elif)',
+    unlocked: false,
+    children: ['perulangan'],
+  },
+  {
+    id: 'perulangan',
+    name: 'Perulangan (For, While)',
+    unlocked: false,
+    children: ['struktur_data_fungsi'],
+  },
+  {
+    id: 'struktur_data_fungsi',
+    name: 'Struktur Data & Fungsi',
+    unlocked: false,
+    children: ['list_array', 'dictionary_map', 'fungsi'],
+  },
+  {
+    id: 'list_array',
+    name: 'List / Array',
+    unlocked: false,
+    children: [],
+  },
+  {
+    id: 'dictionary_map',
+    name: 'Dictionary / Map',
+    unlocked: false,
+    children: [],
+  },
+  {
+    id: 'fungsi',
+    name: 'Fungsi (Parameter & Return)',
+    unlocked: false,
+    children: ['penerapan_algoritma'],
+  },
+  {
+    id: 'penerapan_algoritma',
+    name: 'Penerapan Algoritma',
+    unlocked: false,
+    children: ['searching', 'sorting', 'kompleksitas'],
+  },
+  {
+    id: 'searching',
+    name: 'Algoritma Searching (Linear & Binary)',
+    unlocked: false,
+    children: [],
+  },
+  {
+    id: 'sorting',
+    name: 'Algoritma Sorting (Bubble, Selection, Insertion)',
+    unlocked: false,
+    children: [],
+  },
+  {
+    id: 'kompleksitas',
+    name: 'Analisis Kompleksitas Waktu (O(n), O(log n))',
+    unlocked: false,
+    children: ['proyek_mini'],
+  },
+  {
+    id: 'proyek_mini',
+    name: 'Proyek Mini (Integrasi Konsep)',
+    unlocked: false,
+    children: [],
+  },
 ];
 
-const LAYOUT_ILKOM = [
-    // Root
-    { id: "ilkom_1", label: "Algoritma Pemrograman", parents: [] },
-    { id: "ilkom_2", label: "Struktur Data", parents: ["ilkom_1"] },
-    { id: "ilkom_3", label: "Basis Data", parents: ["ilkom_2"] },
-    { id: "ilkom_4", label: "Pemrograman Internet", parents: ["ilkom_2"] },
-];
+// ... (fungsi calculateBounds untuk membatasi luas field)
+function calculateBounds(skills) {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
 
-export default function GraphScreen() {
-    const [nodes, setNodes] = useState([]);
-    const [levels, setLevels] = useState([]);
-    // const [loading, setLoading] = useState(true);
-    const [loading, setLoading] = useState(false);
+  skills.forEach((s) => {
+    if (s.position.x < minX) minX = s.position.x;
+    if (s.position.x > maxX) maxX = s.position.x;
+    if (s.position.y < minY) minY = s.position.y;
+    if (s.position.y > maxY) maxY = s.position.y;
+  });
 
-    // State untuk interaksi (Highlight)
-    const [selectedNodeId, setSelectedNodeId] = useState(null);
-    const [relatedParentIds, setRelatedParentIds] = useState([]);
-    const [relatedChildIds, setRelatedChildIds] = useState([]);
-
-    // === FUNGSI SEEDER YANG LEBIH PINTAR ===
-    // Menerima parameter 'dataToUpload' (bisa LAYOUT_GENERAL atau LAYOUT_RPG)
-    const handleSeedDatabase = async (dataToUpload) => {
-        const user = auth.currentUser;
-        if (!user) return;
-
-        setLoading(true);
-        try {
-            const batch = writeBatch(db);
-            const collectionRef = collection(db, "users", user.uid, "graph_nodes");
-
-            // LANGKAH 1: HAPUS DATA LAMA (CLEAN SLATE)
-            // Ambil semua dokumen yang ada sekarang
-            const snapshot = await getDocs(collectionRef);
-            snapshot.forEach((doc) => {
-                batch.delete(doc.ref); // Masukkan perintah hapus ke batch
-            });
-
-            // LANGKAH 2: MASUKKAN DATA BARU
-            dataToUpload.forEach((item) => {
-                const docRef = doc(db, "users", user.uid, "graph_nodes", item.id);
-                batch.set(docRef, {
-                    label: item.label,
-                    parents: item.parents,
-                    createdAt: new Date()
-                });
-            });
-
-            // LANGKAH 3: EKSEKUSI SEMUA (HAPUS + TULIS)
-            await batch.commit();
-            alert("Layout berhasil diganti!");
-
-        } catch (error) {
-            console.error("Error seeding:", error);
-            alert("Gagal mengganti layout.");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // === 1. AMBIL SEMUA DATA ===
-    useEffect(() => {
-        const user = auth.currentUser;
-        if (!user) return;
-
-        // Kita ambil SEMUA node sekaligus untuk dihitung graph-nya
-        const q = query(collection(db, "users", user.uid, "graph_nodes"));
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const rawNodes = [];
-            snapshot.forEach((doc) => {
-                rawNodes.push({ id: doc.id, ...doc.data() });
-            });
-            setNodes(rawNodes);
-            processGraphLevels(rawNodes); // Hitung level
-            setLoading(false);
-        });
-
-        return () => unsubscribe();
-    }, []);
-
-    // === 2. ALGORITMA MENGHITUNG LEVEL (Supaya tidak duplikat) ===
-    const processGraphLevels = (allNodes) => {
-        // Map untuk menyimpan level setiap node sementara
-        // Format: { 'id_node': level_number }
-        let nodeLevels = {};
-
-        // Fungsi rekursif untuk mencari level terdalam
-        const getLevel = (nodeId, visited = []) => {
-            // Cegah infinite loop jika ada cycle (A -> B -> A)
-            if (visited.includes(nodeId)) return 0;
-
-            // Jika sudah pernah dihitung, pakai yang tersimpan
-            if (nodeLevels[nodeId] !== undefined) return nodeLevels[nodeId];
-
-            const node = allNodes.find(n => n.id === nodeId);
-            if (!node) return 0;
-
-            // === BAGIAN INI YANG PERLU DIGANTI ===
-            // Cek apakah parents ada, DAN pastikan dia benar-benar Array
-            if (!node.parents || !Array.isArray(node.parents) || node.parents.length === 0) {
-                nodeLevels[nodeId] = 0;
-                return 0;
-            }
-
-            // Jika punya parents, level dia adalah: Level tertinggi Parent + 1
-            // Contoh: Node 4 ortunya Node 2(Lvl 1) dan Node 3(Lvl 1). Maka Node 4 = Lvl 2.
-            let maxParentLevel = -1;
-            node.parents.forEach(parentId => {
-                const pLevel = getLevel(parentId, [...visited, nodeId]);
-                if (pLevel > maxParentLevel) maxParentLevel = pLevel;
-            });
-
-            const myLevel = maxParentLevel + 1;
-            nodeLevels[nodeId] = myLevel;
-            return myLevel;
-        };
-
-        // Jalankan perhitungan untuk semua node
-        allNodes.forEach(node => {
-            getLevel(node.id);
-        });
-
-        // Kelompokkan node berdasarkan level untuk di-render
-        // Hasil: [ [Node1], [Node2, Node3], [Node4], ... ]
-        const groupedLevels = [];
-        allNodes.forEach(node => {
-            const lvl = nodeLevels[node.id];
-            if (!groupedLevels[lvl]) groupedLevels[lvl] = [];
-            groupedLevels[lvl].push(node);
-        });
-
-        // === PERBAIKAN: SORTING BERDASARKAN ABJAD ===
-        // Kita urutkan node di dalam setiap level agar rapi (A-Z)
-        // Jadi "Skill 2" pasti di kiri "Skill 3"
-        groupedLevels.forEach(levelNodes => {
-            if (levelNodes) {
-                levelNodes.sort((a, b) => a.label.localeCompare(b.label));
-            }
-        });
-
-        setLevels(groupedLevels);
-    };
-
-    // === 3. HANDLE KLIK NODE (Highlight Hubungan) ===
-    const handleNodePress = (node) => {
-        // Jika diklik lagi, matikan highlight
-        if (selectedNodeId === node.id) {
-            setSelectedNodeId(null);
-            setRelatedParentIds([]);
-            setRelatedChildIds([]);
-            return;
-        }
-
-        setSelectedNodeId(node.id);
-
-        // 1. Cari Parents (langsung dari data node)
-        setRelatedParentIds(node.parents || []);
-
-        // 2. Cari Children (cari node lain yang parents-nya mengandung node ini)
-        const children = nodes.filter(n => n.parents && n.parents.includes(node.id));
-        setRelatedChildIds(children.map(c => c.id));
-    };
-
-    // === FUNGSI RENDER TIAP KOTAK (VERSI UPDATE WARNA ABU-ABU) ===
-    const renderNode = (node) => {
-        // 1. Setup Warna Dasar (Keadaan Normal saat tidak ada yang diklik)
-        let backgroundColor = Colors.white;
-        let borderColor = '#ddd';
-        let textColor = '#333';     // <--- Tambah variabel warna teks
-        let scale = 1;
-        let opacity = 1;            // <--- Tambah variabel transparansi
-
-        // 2. Logika Pewarnaan saat ada Node yang dipilih
-        if (selectedNodeId) {
-            if (node.id === selectedNodeId) {
-                // --- KASUS A: NODE YANG DIPILIH (Fokus Utama) ---
-                backgroundColor = '#FFF3CD'; // Kuning terang
-                borderColor = '#FFC107';     // Border kuning tua
-                textColor = '#212529';       // Teks hitam tegas
-                scale = 1.1;                 // Sedikit membesar
-
-            } else if (relatedParentIds.includes(node.id)) {
-                // --- KASUS B: ORANG TUA (Parent) ---
-                backgroundColor = '#D1E7DD'; // Hijau muda
-                borderColor = '#198754';     // Border hijau tua
-                textColor = '#0f5132';       // Teks hijau gelap
-
-            } else if (relatedChildIds.includes(node.id)) {
-                // --- KASUS C: ANAK (Child) ---
-                backgroundColor = '#CFE2FF'; // Biru muda
-                borderColor = '#0D6EFD';     // Border biru tua
-                textColor = '#084298';       // Teks biru gelap
-
-            } else {
-                // --- KASUS D: TIDAK BERSANGKUTAN (Nonaktif/Abu-abu) ---
-                // <--- PERUBAHAN UTAMA DI SINI
-                backgroundColor = '#EEEEEE'; // Abu-abu solid
-                borderColor = '#BDBDBD';     // Border abu lebih tua
-                textColor = '#9E9E9E';       // Teks jadi abu-abu pudar
-                opacity = 0.6;               // Menjadi agak transparan (redup)
-                scale = 0.98;                // Sedikit mengecil agar terlihat "tenggelam"
-            }
-        }
-
-        return (
-            <TouchableOpacity
-                key={node.id}
-                onPress={() => handleNodePress(node)}
-                // Terapkan style dinamis ke kotak
-                style={[
-                    styles.nodeBox,
-                    {
-                        backgroundColor,
-                        borderColor,
-                        transform: [{ scale }],
-                        opacity // <--- Terapkan opacity di sini
-                    }
-                ]}
-                activeOpacity={0.8} // Efek saat ditekan
-            >
-                {/* Terapkan warna teks dinamis */}
-                <Text style={[styles.nodeText, { color: textColor }]}>
-                    {node.label}
-                </Text>
-            </TouchableOpacity>
-        );
-    };
-
-    if (loading) return <ActivityIndicator size="large" style={{ marginTop: 50 }} />;
-
-    return (
-        <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 50 }}>
-            <View style={{ margin: 20 }}>
-                <Text style={{ textAlign: 'center', marginBottom: 10, fontWeight: 'bold' }}>
-                    Pilih Template Skill Tree:
-                </Text>
-
-                {/* WADAH TOMBOL BERDAMPINGAN */}
-                <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
-
-                    {/* TOMBOL 1: GENERAL */}
-                    <View style={{ width: '45%' }}>
-                        <Button
-                            title="📚 SKILL TREE UMUM"
-                            onPress={() => handleSeedDatabase(LAYOUT_GENERAL)}
-                            color={Colors.primary} // Biru
-                        />
-                    </View>
-
-                    {/* TOMBOL 2: RPG */}
-                    <View style={{ width: '45%' }}>
-                        <Button
-                            title="💻 SKILL TREE ILKOM"
-                            onPress={() => handleSeedDatabase(LAYOUT_ILKOM)}
-                            color={Colors.danger} // Merah
-                        />
-                    </View>
-
-                </View>
-            </View>
-
-            <Text style={styles.headerInfo}>
-                Klik Skill untuk melihat Skill prasyaratnya dan Skill Selanjutnya
-            </Text>
-
-            {/* RENDER PER LEVEL */}
-            {levels.map((levelNodes, index) => (
-                <View key={index} style={styles.levelContainer}>
-                    {/* Garis Label Level (Opsional) */}
-                    {/* <Text style={styles.levelLabel}>Level {index}</Text> */}
-
-                    <View style={styles.nodesRow}>
-                        {levelNodes && levelNodes.map(node => renderNode(node))}
-                    </View>
-
-                    {/* Panah visual antar level (Hiasan) */}
-                    {index < levels.length - 1 && (
-                        <Text style={styles.arrowDown}>⬇</Text>
-                    )}
-                </View>
-            ))}
-
-            {/* LEGENDA WARNA */}
-            {selectedNodeId && (
-                <View style={styles.legend}>
-                    <Text style={{ color: '#198754' }}>■ Prasyarat</Text>
-                    <Text style={{ color: '#FFC107' }}>■ Skill yang Dipilih</Text>
-                    <Text style={{ color: '#0D6EFD' }}>■ Selanjutnya</Text>
-                </View>
-            )}
-        </ScrollView>
-    );
+  return { minX, maxX, minY, maxY };
 }
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        padding: 16,
-        backgroundColor: '#fff',
-    },
-    headerInfo: {
-        textAlign: 'center',
-        color: '#888',
-        marginBottom: 20,
-        fontSize: 12,
-    },
-    levelContainer: {
-        alignItems: 'center',
-        marginBottom: 10,
-    },
-    levelLabel: {
-        position: 'absolute',
-        left: 0,
-        fontSize: 10,
-        color: '#ccc',
-    },
-    nodesRow: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'center',
-        alignItems: 'center',
-        width: '100%',
-    },
-    nodeBox: {
-        paddingVertical: 10,
-        paddingHorizontal: 15,
-        margin: 5,
-        borderRadius: 8,
-        borderWidth: 2,
-        minWidth: 80,
-        alignItems: 'center',
-        elevation: 2, // Shadow Android
-        shadowColor: '#000', // Shadow iOS
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.2,
-        shadowRadius: 1.5,
-    },
-    nodeText: {
-        fontWeight: 'bold',
-        color: '#333',
-    },
-    arrowDown: {
-        marginTop: 10,
-        color: '#ddd',
-        fontSize: 20,
-        fontWeight: 'bold',
-    },
-    legend: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        padding: 10,
-        backgroundColor: '#f0f0f0',
-        borderRadius: 20,
-        marginTop: 20,
+// Helper untuk mendapatkan struktur pohon dari array flat
+function buildTreeStructure(data, rootId) {
+  const nodes = {};
+  // Copy data
+  data.forEach(d => nodes[d.id] = { ...d, children: [] });
+  
+  // Re-link children objects berdasarkan array string children
+  data.forEach(d => {
+    if (nodes[d.id].childrenIDs) { // Asumsi ada field childrenIDs atau gunakan logic kamu
+       // Logic kamu menggunakan array string 'children' di data mentah
     }
+  });
+  
+  // Karena data kamu manual (hardcoded children strings), kita traverse dari root saja
+  return nodes;
+}
+
+// ALGORITMA LAYOUT YANG LEBIH BAIK
+function layoutNodesSmart(flatData, rootId, config = { xSpacing: 100, ySpacing: 160 }) {
+    // 1. Buat Map untuk akses cepat
+    const nodeMap = new Map(flatData.map(node => [node.id, { ...node }]));
+    
+    // Global counter untuk posisi X daun (leaf)
+    let currentLeafX = 0;
+
+    // Fungsi rekursif untuk menghitung posisi
+    function assignPosition(nodeId, depth) {
+        const node = nodeMap.get(nodeId);
+        if (!node) return null;
+
+        // Set Y berdasarkan kedalaman (depth)
+        node.position = { y: depth * config.ySpacing, x: 0 };
+
+        if (!node.children || node.children.length === 0) {
+            // KASUS 1: DAUN (LEAF)
+            // Tempatkan di posisi X berikutnya
+            node.position.x = currentLeafX;
+            // Geser cursor X untuk daun berikutnya (memberi jarak)
+            currentLeafX += config.xSpacing;
+        } else {
+            // KASUS 2: PARENT
+            // Proses semua anak terlebih dahulu (Post-order)
+            node.children.forEach(childId => assignPosition(childId, depth + 1));
+            
+            // Setelah anak-anak punya posisi, tempatkan Parent di tengah-tengah
+            const firstChild = nodeMap.get(node.children[0]);
+            const lastChild = nodeMap.get(node.children[node.children.length - 1]);
+            
+            if (firstChild && lastChild) {
+                node.position.x = (firstChild.position.x + lastChild.position.x) / 2;
+            }
+        }
+    }
+
+    // Jalankan kalkulasi
+    assignPosition(rootId, 0);
+
+    // Kembalikan array nodes yang sudah punya posisi
+    // Kita perlu memfilter node yang terjangkau dari root saja
+    const result = [];
+    
+    // Helper untuk mengumpulkan hasil tree yang sudah terproses
+    function collectNodes(nodeId) {
+        const node = nodeMap.get(nodeId);
+        if(node && !result.find(n => n.id === node.id)){
+            result.push(node);
+            node.children.forEach(collectNodes);
+        }
+    }
+    collectNodes(rootId);
+    
+    return result;
+}
+
+export default function SkillTree() {
+  // --- PERBAIKAN 2: Tentukan rootId 'orientasi' ---
+  const [skills, setSkills] = useState(() =>
+    layoutNodesSmart(skillsData, 'orientasi', { xSpacing: 100, ySpacing: 160 })
+  );
+  
+  const PADDING = 30;
+
+  // Hitung batas dan ukuran kanvas sekali
+  const [canvasSize, setCanvasSize] = useState(() => {
+    const bounds = calculateBounds(skills);
+    const canvasWidth = bounds.maxX - bounds.minX + PADDING * 2;
+    const canvasHeight = bounds.maxY - bounds.minY + PADDING * 2;
+    const offsetX = -bounds.minX + PADDING;
+    const offsetY = -bounds.minY + PADDING;
+    return { canvasWidth, canvasHeight, offsetX, offsetY };
+  });
+  
+  // (Ini adalah kode gestur Anda sebelumnya, yang Anda bilang berfungsi)
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const savedTranslateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+  const isPinching = useSharedValue(false);
+
+  const pan = Gesture.Pan()
+    .minDistance(5) // <-- Menambahkan minDistance kecil
+    .onStart(() => {
+      if (isPinching.value) return;
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    })
+    .onUpdate((e) => {
+      if (isPinching.value) return;
+      translateX.value = savedTranslateX.value + e.translationX / scale.value;
+      translateY.value = savedTranslateY.value + e.translationY / scale.value;
+    });
+
+  const pinch = Gesture.Pinch()
+    .onStart((e) => {
+      isPinching.value = true;
+      savedScale.value = scale.value;
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    })
+    .onUpdate((e) => {
+      const newScale = Math.min(Math.max(savedScale.value * e.scale, 0.5), 2);
+      const focalX = e.focalX - width / 2;
+      const focalY = e.focalY - height / 2;
+      const scaleRatio = newScale / savedScale.value;
+      translateX.value = (savedTranslateX.value - focalX) * scaleRatio + focalX;
+      translateY.value = (savedTranslateY.value - focalY) * scaleRatio + focalY;
+      scale.value = newScale;
+    })
+    .onEnd(() => {
+      isPinching.value = false;
+      savedScale.value = scale.value;
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    });
+
+  const composed = Gesture.Simultaneous(pan, pinch);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
+
+  const handleSkillTap = (tappedSkill) => {
+    if (tappedSkill.unlocked) {
+      Alert.alert(tappedSkill.name, 'Skill sudah terbuka.');
+      return;
+    }
+    const parent = skills.find((s) => s.children.includes(tappedSkill.id));
+    if (parent && parent.unlocked) {
+      setSkills((currentSkills) =>
+        currentSkills.map((s) =>
+          s.id === tappedSkill.id ? { ...s, unlocked: true } : s
+        )
+      );
+      Alert.alert('Skill Terbuka!', tappedSkill.name);
+    } else {
+      Alert.alert(
+        'Terkunci',
+        'Kamu harus membuka skill sebelumnya terlebih dahulu.'
+      );
+    }
+  };
+
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <View style={styles.container}>
+        <GestureDetector gesture={composed}>
+          <Animated.View style={styles.gestureArea}>
+            <Animated.View style={[styles.canvasWrapper, animatedStyle]}>
+              <Svg
+                height={canvasSize.canvasHeight}
+                width={canvasSize.canvasWidth}
+              >
+                {/* Garis antar node */}
+                {skills.map((s) =>
+                  s.children.map((childId) => {
+                    const child = skills.find((c) => c.id === childId);
+                    if (!child) return null;
+                    return (
+                      <Line
+                        key={`${s.id}-${childId}`}
+                        x1={s.position.x + canvasSize.offsetX}
+                        y1={s.position.y + canvasSize.offsetY}
+                        x2={child.position.x + canvasSize.offsetX}
+                        y2={child.position.y + canvasSize.offsetY}
+                        stroke={child.unlocked ? '#4CAF50' : '#888'}
+                        strokeWidth="2"
+                      />
+                    );
+                  })
+                )}
+
+                {/* Node skill */}
+                {skills.map((s) => (
+                  <G key={s.id} onPress={() => handleSkillTap(s)}>
+                    <Circle
+                      cx={s.position.x + canvasSize.offsetX}
+                      cy={s.position.y + canvasSize.offsetY}
+                      r="30"
+                      fill={s.unlocked ? '#4CAF50' : '#555'}
+                      stroke="#222"
+                      strokeWidth="2"
+                    />
+                    <SvgText
+                      x={s.position.x + canvasSize.offsetX}
+                      y={s.position.y + canvasSize.offsetY + 5}
+                      fontSize="10"
+                      fill="#fff"
+      
+                      textAnchor="middle"
+                      pointerEvents="none"
+                    >
+                      {s.name}
+                    </SvgText>
+                  </G>
+                ))}
+              </Svg>
+            </Animated.View>
+          </Animated.View>
+        </GestureDetector>
+
+        <View style={styles.hint} pointerEvents="none">
+          <Text style={{ color: '#aaa', fontSize: 12, textAlign: 'center' }}>
+            🔍 Pinch to zoom • Drag to move • Tap node to unlock
+          </Text>
+        </View>
+      </View>
+    </GestureHandlerRootView>
+  );
+}
+
+// Stylesheet Anda sudah benar (canvasWrapper harus KOSONG)
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#0a0a0a',
+  },
+  gestureArea: {
+    flex: 1,
+    overflow: 'visible',
+  },
+  canvasWrapper: {
+    // KOSONG (tidak ada flex: 1)
+  },
+  hint: {
+    position: 'absolute',
+    bottom: 30,
+    width: '100%',
+    alignItems: 'center',
+  },
 });
