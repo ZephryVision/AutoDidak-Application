@@ -7,20 +7,24 @@ import {
   Text,
   Animated,
   PanResponder,
-  Pressable, 
+  Pressable,
+  StatusBar,
+  TouchableOpacity,
+  useColorScheme,
 } from 'react-native';
 import {
   MaterialCommunityIcons,
   FontAwesome5,
   Ionicons,
   Entypo,
-  MaterialIcons
+  MaterialIcons,
+  Feather
 } from '@expo/vector-icons';
 import Svg, { Line } from 'react-native-svg';
 
 const { width, height } = Dimensions.get('window');
 
-// --- DATA SKILLS (SAMA) ---
+// --- DATA SKILLS ---
 const skillsData = [
   { id: 'orientasi', name: 'Orientasi Awal', unlocked: true, children: ['algoritma_dasar', 'pemrograman_dasar'], icon: { lib: 'MCI', name: 'flag-checkered' } },
   { id: 'algoritma_dasar', name: 'Algoritma & Logika', unlocked: false, children: ['representasi_algoritma', 'struktur_dasar_algoritma'], icon: { lib: 'MCI', name: 'brain' } },
@@ -120,11 +124,16 @@ function calculateBounds(skills) {
 }
 
 export default function SkillTree() {
+  const systemScheme = useColorScheme();
+  const [isDarkMode, setIsDarkMode] = useState(systemScheme === 'dark');
+
   const [skills, setSkills] = useState(() =>
     layoutAdaptive(JSON.parse(JSON.stringify(skillsData)), 'orientasi')
   );
 
   const PADDING = 100;
+  
+  // --- HITUNG BOUNDARIES ---
   const [canvasInfo] = useState(() => {
     const bounds = calculateBounds(skills);
     const w = (bounds.maxX - bounds.minX + PADDING * 2) * 1.2;
@@ -137,28 +146,64 @@ export default function SkillTree() {
     };
   });
 
-  const initialY = -(canvasInfo.h - height) > 0 ? 0 : -(canvasInfo.h - height) + 100;
+  // Batas Scroll (Bernilai Negatif)
+  // Contoh: Jika konten 1000px dan layar 400px, kita bisa scroll sejauh -600px
+  const minScrollX = -(canvasInfo.w - width);
+  const minScrollY = -(canvasInfo.h - height);
+  const maxScrollX = 0; // Tidak boleh geser lebih dari sisi kiri
+  const maxScrollY = 0; // Tidak boleh geser lebih dari sisi atas
 
-  const pan = useRef(new Animated.ValueXY({ x: 0, y: initialY })).current;
+  // Posisi awal: Usahakan di bawah, tapi jangan melebihi batas
+  const initialY = minScrollY > 0 ? 0 : minScrollY + 100; // +100 biar gak mepet banget bawahnya
+  const clampedInitialY = Math.min(maxScrollY, Math.max(minScrollY, initialY));
 
-  // --- 2. PERBAIKAN LOGIKA PAN RESPONDER ---
+  // --- LOGIC PAN MANUAL ---
+  // Kita gunakan useRef untuk menyimpan posisi terakhir secara manual
+  // agar lebih mudah melakukan matematika clamping (pembatasan)
+  const pan = useRef(new Animated.ValueXY({ x: 0, y: clampedInitialY })).current;
+  const lastOffset = useRef({ x: 0, y: clampedInitialY });
+
   const panResponder = useRef(
     PanResponder.create({
-      // HANYA aktifkan drag jika user menggeser lebih dari 5 pixel (Threshold)
-      // Ini mencegah drag aktif saat user cuma ingin "Tap/Klik"
       onMoveShouldSetPanResponder: (_, gestureState) => {
         return Math.abs(gestureState.dx) > 5 || Math.abs(gestureState.dy) > 5;
       },
       onPanResponderGrant: () => {
-        pan.setOffset({ x: pan.x._value, y: pan.y._value });
-        pan.setValue({ x: 0, y: 0 });
+        // Kita tidak memakai setOffset bawaan animated karena mempersulit clamping manual
+        // Cukup biarkan lastOffset menyimpan posisi terakhir
       },
-      onPanResponderMove: Animated.event(
-        [null, { dx: pan.x, dy: pan.y }],
-        { useNativeDriver: false }
-      ),
-      onPanResponderRelease: () => {
-        pan.flattenOffset();
+      onPanResponderMove: (_, gestureState) => {
+        // 1. Hitung posisi calon baru (Posisi Terakhir + Pergeseran Jari)
+        let newX = lastOffset.current.x + gestureState.dx;
+        let newY = lastOffset.current.y + gestureState.dy;
+
+        // 2. Lakukan CLAMPING (Pembatasan)
+        // Jangan biarkan X lebih besar dari 0 atau lebih kecil dari minScrollX
+        if (newX > maxScrollX) newX = maxScrollX; 
+        if (newX < minScrollX) newX = minScrollX;
+        
+        if (newY > maxScrollY) newY = maxScrollY;
+        if (newY < minScrollY) newY = minScrollY;
+
+        // 3. Update Animated Value
+        pan.setValue({ x: newX, y: newY });
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        // 4. Simpan posisi terakhir yang sudah di-clamp ke variabel ref
+        // Kita ambil value langsung dari pan karena itu sudah hasil clamping di onMove
+        // Note: _value adalah properti internal, cara paling aman di RN tanpa listener
+        // tapi untuk kasus sederhana ini bisa pakai listener atau tracking manual seperti di atas.
+        
+        // Untuk akurasi, kita hitung ulang clamp di sini untuk disimpan
+        let finalX = lastOffset.current.x + gestureState.dx;
+        let finalY = lastOffset.current.y + gestureState.dy;
+
+        if (finalX > maxScrollX) finalX = maxScrollX;
+        if (finalX < minScrollX) finalX = minScrollX;
+        if (finalY > maxScrollY) finalY = maxScrollY;
+        if (finalY < minScrollY) finalY = minScrollY;
+
+        lastOffset.current = { x: finalX, y: finalY };
       },
     })
   ).current;
@@ -182,33 +227,30 @@ export default function SkillTree() {
     }
   };
 
-  const COLORS = {
-    bg: '#F4F3EF',
-    stroke: '#000000',
-    locked: '#fbe145',
-    unlocked: '#4cdd7c',
-    iconLocked: '#000000',
-    iconUnlocked: '#000000',
-    shadow: '#000000',
-    textBg: '#000000',
-    text: '#FFFFFF',
+  const THEMES = {
+    light: {
+      bg: '#F4F3EF', stroke: '#000000', locked: '#fbe145', unlocked: '#4cdd7c',
+      iconLocked: '#000000', iconUnlocked: '#000000', shadow: '#000000',
+      cardBg: '#FFFFFF', text: '#000000', tagBg: '#000000', tagText: '#FFFFFF'
+    },
+    dark: {
+      bg: '#121212', stroke: '#FFFFFF', locked: '#333333', unlocked: '#00FF9D',
+      iconLocked: '#888888', iconUnlocked: '#000000', shadow: '#FFFFFF',
+      cardBg: '#000000', text: '#FFFFFF', tagBg: '#FFFFFF', tagText: '#000000'
+    }
   };
+  const activeColors = isDarkMode ? THEMES.dark : THEMES.light;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: activeColors.bg }]}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+
       <Animated.View
         style={{ transform: [{ translateX: pan.x }, { translateY: pan.y }] }}
         {...panResponder.panHandlers}
       >
-        <View style={{ width: canvasInfo.w, height: canvasInfo.h}}>
-
-          {/* --- 3. PERBAIKAN SVG UNTUK WEB --- */}
-          {/* Tambahkan width & height eksplisit agar muncul di web */}
-          <Svg 
-            width={canvasInfo.w} 
-            height={canvasInfo.h} 
-            style={StyleSheet.absoluteFill}
-          >
+        <View style={{ width: canvasInfo.w, height: canvasInfo.h }}>
+          <Svg width={canvasInfo.w} height={canvasInfo.h} style={StyleSheet.absoluteFill}>
             {skills.map((s) =>
               s.children.map((child) => (
                 <Line
@@ -217,140 +259,71 @@ export default function SkillTree() {
                   y1={s.position.y + canvasInfo.offsetY}
                   x2={child.position.x + canvasInfo.offsetX}
                   y2={child.position.y + canvasInfo.offsetY}
-                  stroke={COLORS.stroke}
+                  stroke={activeColors.stroke}
                   strokeWidth="4"
                 />
               ))
             )}
           </Svg>
 
-          {/* LAYER 2: NODE */}
           {skills.map((s) => {
             const left = s.position.x + canvasInfo.offsetX - 35;
             const top = s.position.y + canvasInfo.offsetY - 35;
-
             return (
-              // --- 4. GANTI VIEW BIASA JADI PRESSABLE ---
-              // Pressable menangani event touch lebih baik daripada View onTouchEnd
               <Pressable
                 key={s.id}
                 style={[styles.nodeContainer, { left, top }]}
                 onPress={() => handleSkillTap(s)}
               >
-                {/* A. Hard Shadow View */}
-                <View style={[styles.circleBase, styles.shadowCircle]} />
-
-                {/* B. Main Circle View */}
+                <View style={[styles.circleBase, styles.shadowCircle, { backgroundColor: activeColors.shadow }]} />
                 <View style={[
-                  styles.circleBase,
-                  styles.mainCircle,
-                  { backgroundColor: s.unlocked ? COLORS.unlocked : COLORS.locked }
+                  styles.circleBase, styles.mainCircle,
+                  { backgroundColor: s.unlocked ? activeColors.unlocked : activeColors.locked, borderColor: activeColors.stroke }
                 ]}>
                   <IconRenderer
-                    lib={s.icon?.lib}
-                    name={s.icon?.name}
-                    size={32}
-                    color={s.unlocked ? COLORS.iconUnlocked : COLORS.iconLocked}
+                    lib={s.icon?.lib} name={s.icon?.name} size={32}
+                    color={s.unlocked ? activeColors.iconUnlocked : activeColors.iconLocked}
                   />
                 </View>
-
-                {/* D. Label Text */}
-                <View style={styles.labelContainer}>
-                  <Text style={styles.labelText}>
+                <View style={[styles.labelContainer, { backgroundColor: activeColors.tagBg }]}>
+                  <Text style={[styles.labelText, { color: activeColors.tagText }]}>
                     {s.name.length > 18 ? s.name.substring(0, 16) + '..' : s.name.toUpperCase()}
                   </Text>
                 </View>
-
               </Pressable>
             );
           })}
-
         </View>
       </Animated.View>
 
       <View style={styles.overlay} pointerEvents="none">
-        <View style={styles.neoCard}>
-          <Text style={styles.neoText}>SKILL TREE v2.0</Text>
-          <Text style={styles.neoSubText}>Drag to Navigate</Text>
+        <View style={[styles.neoCard, { backgroundColor: activeColors.cardBg, borderColor: activeColors.stroke, shadowColor: activeColors.shadow }]}>
+          <Text style={[styles.neoText, { color: activeColors.text }]}>SKILL TREE v2.1</Text>
+          <Text style={[styles.neoSubText, { color: activeColors.text }]}>{isDarkMode ? 'Cyber Mode' : 'Paper Mode'}</Text>
         </View>
       </View>
+
+      <TouchableOpacity 
+        style={[styles.toggleButton, { backgroundColor: activeColors.cardBg, borderColor: activeColors.stroke, shadowColor: activeColors.shadow }]}
+        onPress={() => setIsDarkMode(!isDarkMode)}
+      >
+        <Feather name={isDarkMode ? "sun" : "moon"} size={24} color={activeColors.text} />
+      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F4F3EF',
-    overflow: 'hidden', // Penting untuk web agar tidak scroll bar ganda
-  },
-  nodeContainer: {
-    position: 'absolute',
-    width: 70,
-    height: 70,
-    justifyContent: 'center',
-    alignItems: 'center',
-    // cursor: 'pointer', // (Opsional) Jika di web ingin ada kursor tangan
-  },
-  circleBase: {
-    position: 'absolute',
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    borderWidth: 4,
-    borderColor: '#000',
-  },
-  shadowCircle: {
-    backgroundColor: '#000',
-    top: 6,
-    left: 6,
-  },
-  mainCircle: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    top: 0,
-    left: 0,
-  },
-  labelContainer: {
-    position: 'absolute',
-    top: 75,
-    backgroundColor: '#000',
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    minWidth: 100,
-    alignItems: 'center',
-  },
-  labelText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: 'bold',
-    fontFamily: 'monospace',
-  },
-  overlay: {
-    position: 'absolute',
-    top: 50,
-    left: 20,
-  },
-  neoCard: {
-    backgroundColor: '#fff',
-    borderWidth: 3,
-    borderColor: '#000',
-    padding: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 0,
-  },
-  neoText: {
-    fontWeight: '900',
-    fontSize: 16,
-    color: '#000',
-  },
-  neoSubText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#555',
-    marginTop: 4
-  }
+  container: { flex: 1, overflow: 'hidden' },
+  nodeContainer: { position: 'absolute', width: 70, height: 70, justifyContent: 'center', alignItems: 'center' },
+  circleBase: { position: 'absolute', width: 70, height: 70, borderRadius: 35, borderWidth: 4 },
+  shadowCircle: { top: 6, left: 6 },
+  mainCircle: { justifyContent: 'center', alignItems: 'center', top: 0, left: 0 },
+  labelContainer: { position: 'absolute', top: 75, paddingHorizontal: 6, paddingVertical: 4, minWidth: 100, alignItems: 'center' },
+  labelText: { fontSize: 11, fontWeight: 'bold', fontFamily: 'monospace' },
+  overlay: { position: 'absolute', top: 50, left: 20 },
+  toggleButton: { position: 'absolute', top: 50, right: 20, width: 50, height: 50, justifyContent: 'center', alignItems: 'center', borderWidth: 3, shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 0 },
+  neoCard: { borderWidth: 3, padding: 10, shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 0 },
+  neoText: { fontWeight: '900', fontSize: 16 },
+  neoSubText: { fontSize: 12, fontWeight: 'bold', marginTop: 4, opacity: 0.7 }
 });
