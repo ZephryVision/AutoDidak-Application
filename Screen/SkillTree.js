@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -22,28 +22,15 @@ import {
 } from '@expo/vector-icons';
 import Svg, { Line } from 'react-native-svg';
 
+// --- IMPORT UNTUK SAVE PROGRESS ---
+import { doc, updateDoc } from "firebase/firestore";
+import { db, auth } from '../firebaseConfig';
+
 const { width, height } = Dimensions.get('window');
 
-// --- DATA SKILLS ---
-const skillsData = [
-  { id: 'orientasi', name: 'Orientasi Awal', unlocked: true, children: ['algoritma_dasar', 'pemrograman_dasar'], icon: { lib: 'MCI', name: 'flag-checkered' } },
-  { id: 'algoritma_dasar', name: 'Algoritma & Logika', unlocked: false, children: ['representasi_algoritma', 'struktur_dasar_algoritma'], icon: { lib: 'MCI', name: 'brain' } },
-  { id: 'representasi_algoritma', name: 'Flowchart', unlocked: false, children: [], icon: { lib: 'MCI', name: 'file-tree' } },
-  { id: 'struktur_dasar_algoritma', name: 'Sekuensial', unlocked: false, children: ['struktur_data_fungsi'], icon: { lib: 'MCI', name: 'format-list-numbered' } },
-  { id: 'struktur_data_fungsi', name: 'Struktur Data', unlocked: false, children: ['list_array', 'dictionary_map', 'kompleksitas'], icon: { lib: 'MCI', name: 'database' } },
-  { id: 'list_array', name: 'List / Array', unlocked: false, children: [], icon: { lib: 'MCI', name: 'code-brackets' } },
-  { id: 'dictionary_map', name: 'Dictionary', unlocked: false, children: [], icon: { lib: 'MCI', name: 'book-open-page-variant' } },
-  { id: 'kompleksitas', name: 'Kompleksitas', unlocked: false, children: [], icon: { lib: 'MCI', name: 'chart-line' } },
-  { id: 'pemrograman_dasar', name: 'Sintaks Python', unlocked: false, children: ['variabel_tipe_data'], icon: { lib: 'MCI', name: 'language-python' } },
-  { id: 'variabel_tipe_data', name: 'Variabel', unlocked: false, children: ['operator'], icon: { lib: 'MCI', name: 'variable' } },
-  { id: 'operator', name: 'Operator', unlocked: false, children: ['percabangan'], icon: { lib: 'MCI', name: 'calculator' } },
-  { id: 'percabangan', name: 'Percabangan', unlocked: false, children: ['perulangan'], icon: { lib: 'MCI', name: 'call-split' } },
-  { id: 'perulangan', name: 'Perulangan', unlocked: false, children: ['fungsi'], icon: { lib: 'MCI', name: 'refresh' } },
-  { id: 'fungsi', name: 'Fungsi', unlocked: false, children: ['penerapan_algoritma'], icon: { lib: 'MCI', name: 'function' } },
-  { id: 'penerapan_algoritma', name: 'Studi Kasus', unlocked: false, children: ['searching', 'sorting'], icon: { lib: 'FA5', name: 'search' } },
-  { id: 'searching', name: 'Searching', unlocked: false, children: [], icon: { lib: 'IO', name: 'search-circle' } },
-  { id: 'sorting', name: 'Sorting', unlocked: false, children: ['proyek_mini'], icon: { lib: 'MCI', name: 'sort-variant' } },
-  { id: 'proyek_mini', name: 'FINAL PROJECT', unlocked: false, children: [], icon: { lib: 'MCI', name: 'trophy-award' } },
+// --- DATA FALLBACK ---
+const DEFAULT_DATA = [
+  { id: 'start', name: 'Start', unlocked: true, children: [], icon: { lib: 'MCI', name: 'flag-checkered' } },
 ];
 
 const IconRenderer = ({ lib, name, size, color }) => {
@@ -89,7 +76,7 @@ function layoutAdaptive(flatSkills, rootId) {
     }
   }
 
-  const rootNode = nodeMap.get(rootId);
+  const rootNode = nodeMap.get(rootId) || nodeMap.get(flatSkills[0]?.id);
   if (rootNode) calculatePosition(rootNode, 0);
 
   let maxY = 0;
@@ -114,6 +101,8 @@ function layoutAdaptive(flatSkills, rootId) {
 function calculateBounds(skills) {
   let minX = Infinity; let maxX = -Infinity;
   let minY = Infinity; let maxY = -Infinity;
+  if (skills.length === 0) return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+
   skills.forEach((s) => {
     if (s.position.x < minX) minX = s.position.x;
     if (s.position.x > maxX) maxX = s.position.x;
@@ -123,17 +112,64 @@ function calculateBounds(skills) {
   return { minX, maxX, minY, maxY };
 }
 
-export default function SkillTree() {
+// === COMPONENT UTAMA ===
+export default function SkillTree({ route }) {
   const systemScheme = useColorScheme();
   const [isDarkMode, setIsDarkMode] = useState(systemScheme === 'dark');
 
+  const { skillTreeData, taskId } = route.params || {};
+
+  const initialRawData = skillTreeData || DEFAULT_DATA;
+
   const [skills, setSkills] = useState(() =>
-    layoutAdaptive(JSON.parse(JSON.stringify(skillsData)), 'orientasi')
+    layoutAdaptive(JSON.parse(JSON.stringify(initialRawData)), 'orientasi')
   );
 
+  // --- FUNGSI SAVE KE FIRESTORE (VERSI FIX) ---
+  const saveProgressToFirestore = async (updatedSkills) => {
+    if (!taskId) return;
+
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      // === LANGKAH PEMBERSIHAN (SANITIZING) ===
+      // Kita ubah kembali struktur data agar sesuai format Firestore
+      const cleanData = updatedSkills.map((node) => {
+
+        // 1. Perbaiki array 'children'
+        // Jika isinya object (karena layoutAdaptive), ambil ID-nya saja.
+        // Jika isinya sudah string, biarkan saja.
+        const cleanChildren = node.children
+          ? node.children.map(child => (typeof child === 'object' ? child.id : child))
+          : [];
+
+        // 2. Return objek bersih
+        return {
+          id: node.id,
+          name: node.name,
+          unlocked: node.unlocked,
+          children: cleanChildren, // <-- Sekarang isinya hanya ["id1", "id2"]
+          icon: node.icon
+        };
+      });
+
+      const taskDocRef = doc(db, "users", user.uid, "tasks", taskId);
+
+      // Update dokumen
+      await updateDoc(taskDocRef, {
+        skillTreeData: cleanData
+      });
+
+      console.log("Progress berhasil disimpan ke Firestore!");
+    } catch (error) {
+      console.error("Gagal menyimpan progress:", error);
+      Alert.alert("Error Save", "Gagal menyimpan progress ke server.");
+    }
+  };
+
   const PADDING = 100;
-  
-  // --- HITUNG BOUNDARIES ---
+
   const [canvasInfo] = useState(() => {
     const bounds = calculateBounds(skills);
     const w = (bounds.maxX - bounds.minX + PADDING * 2) * 1.2;
@@ -146,55 +182,37 @@ export default function SkillTree() {
     };
   });
 
-  // Batas Scroll (Bernilai Negatif)
-  // Contoh: Jika konten 1000px dan layar 400px, kita bisa scroll sejauh -600px
   const minScrollX = -(canvasInfo.w - width);
   const minScrollY = -(canvasInfo.h - height);
-  const maxScrollX = 0; // Tidak boleh geser lebih dari sisi kiri
-  const maxScrollY = 0; // Tidak boleh geser lebih dari sisi atas
+  const maxScrollX = 0;
+  const maxScrollY = 0;
 
-  // Posisi awal: Usahakan di bawah, tapi jangan melebihi batas
-  const initialY = minScrollY > 0 ? 0 : minScrollY + 100; // +100 biar gak mepet banget bawahnya
+  const initialY = minScrollY > 0 ? 0 : minScrollY + 100;
   const clampedInitialY = Math.min(maxScrollY, Math.max(minScrollY, initialY));
 
-  // --- LOGIC PAN MANUAL ---
-  // Kita gunakan useRef untuk menyimpan posisi terakhir secara manual
-  // agar lebih mudah melakukan matematika clamping (pembatasan)
   const pan = useRef(new Animated.ValueXY({ x: 0, y: clampedInitialY })).current;
   const lastOffset = useRef({ x: 0, y: clampedInitialY });
 
+  // === PERBAIKAN DI BAGIAN INI (PAN RESPONDER) ===
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gestureState) => {
         return Math.abs(gestureState.dx) > 5 || Math.abs(gestureState.dy) > 5;
       },
-      onPanResponderGrant: () => {
-        // Kita tidak memakai setOffset bawaan animated karena mempersulit clamping manual
-        // Cukup biarkan lastOffset menyimpan posisi terakhir
-      },
+      onPanResponderGrant: () => { },
       onPanResponderMove: (_, gestureState) => {
-        // 1. Hitung posisi calon baru (Posisi Terakhir + Pergeseran Jari)
         let newX = lastOffset.current.x + gestureState.dx;
         let newY = lastOffset.current.y + gestureState.dy;
 
-        // 2. Lakukan CLAMPING (Pembatasan)
-        // Jangan biarkan X lebih besar dari 0 atau lebih kecil dari minScrollX
-        if (newX > maxScrollX) newX = maxScrollX; 
+        if (newX > maxScrollX) newX = maxScrollX;
         if (newX < minScrollX) newX = minScrollX;
-        
+
         if (newY > maxScrollY) newY = maxScrollY;
         if (newY < minScrollY) newY = minScrollY;
 
-        // 3. Update Animated Value
         pan.setValue({ x: newX, y: newY });
       },
       onPanResponderRelease: (_, gestureState) => {
-        // 4. Simpan posisi terakhir yang sudah di-clamp ke variabel ref
-        // Kita ambil value langsung dari pan karena itu sudah hasil clamping di onMove
-        // Note: _value adalah properti internal, cara paling aman di RN tanpa listener
-        // tapi untuk kasus sederhana ini bisa pakai listener atau tracking manual seperti di atas.
-        
-        // Untuk akurasi, kita hitung ulang clamp di sini untuk disimpan
         let finalX = lastOffset.current.x + gestureState.dx;
         let finalY = lastOffset.current.y + gestureState.dy;
 
@@ -216,12 +234,14 @@ export default function SkillTree() {
     const parent = skills.find((s) =>
       s.children.some((child) => child.id === tappedSkill.id)
     );
-    if (parent && parent.unlocked) {
-      setSkills((currentSkills) =>
-        currentSkills.map((s) =>
-          s.id === tappedSkill.id ? { ...s, unlocked: true } : s
-        )
+
+    if (!parent || (parent && parent.unlocked)) {
+      const newSkills = skills.map((s) =>
+        s.id === tappedSkill.id ? { ...s, unlocked: true } : s
       );
+      setSkills(newSkills);
+      saveProgressToFirestore(newSkills);
+      Alert.alert('SELAMAT!', `Kamu membuka skill: ${tappedSkill.name}`);
     } else {
       Alert.alert('TERKUNCI', 'Selesaikan skill sebelumnya!');
     }
@@ -298,12 +318,12 @@ export default function SkillTree() {
 
       <View style={styles.overlay} pointerEvents="none">
         <View style={[styles.neoCard, { backgroundColor: activeColors.cardBg, borderColor: activeColors.stroke, shadowColor: activeColors.shadow }]}>
-          <Text style={[styles.neoText, { color: activeColors.text }]}>SKILL TREE v2.1</Text>
+          <Text style={[styles.neoText, { color: activeColors.text }]}>{taskId ? "PROGRESS SAVED" : "PREVIEW MODE"}</Text>
           <Text style={[styles.neoSubText, { color: activeColors.text }]}>{isDarkMode ? 'Cyber Mode' : 'Paper Mode'}</Text>
         </View>
       </View>
 
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[styles.toggleButton, { backgroundColor: activeColors.cardBg, borderColor: activeColors.stroke, shadowColor: activeColors.shadow }]}
         onPress={() => setIsDarkMode(!isDarkMode)}
       >

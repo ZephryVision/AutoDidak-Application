@@ -57,7 +57,7 @@ export default function LoginScreen({ navigation }) {
       >
         <Text style={localStyles.registerText}>
           Belum punya akun?
-          <Text style={localStyles.registerButtonText}>Daftar di sini</Text>
+          <Text style={localStyles.registerButtonText}> Daftar di sini</Text>
         </Text>
       </TouchableOpacity>
     </View>
