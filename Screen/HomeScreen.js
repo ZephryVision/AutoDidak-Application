@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
   },
   // 1. BANNER
   bannerContainer: {
-    height: 180,
+    height: 200,
     width: '100%',
     overflow: 'hidden',
     borderBottomWidth: 3,
@@ -264,7 +264,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
-
   },
   // 2. PROFILE
   profileSection: {
@@ -286,8 +285,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   avatarImage: {
-    width: '90%',
-    height: '90%',
+    width: '100%',
+    height: '100%',
     resizeMode: 'contain',
   },
   nameRow: {
