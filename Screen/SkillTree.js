@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -11,6 +11,7 @@ import {
   StatusBar,
   TouchableOpacity,
   useColorScheme,
+  Platform
 } from 'react-native';
 import {
   MaterialCommunityIcons,
@@ -20,17 +21,19 @@ import {
   MaterialIcons,
   Feather
 } from '@expo/vector-icons';
-import Svg, { Line } from 'react-native-svg';
-
-// --- IMPORT UNTUK SAVE PROGRESS ---
 import { doc, updateDoc } from "firebase/firestore";
 import { db, auth } from '../firebaseConfig';
 
 const { width, height } = Dimensions.get('window');
 
-// --- DATA FALLBACK ---
-const DEFAULT_DATA = [
-  { id: 'start', name: 'Start', unlocked: true, children: [], icon: { lib: 'MCI', name: 'flag-checkered' } },
+// === DATA SKILL ===
+const ADAPTED_DATA = [
+  { id: '1', name: 'Start', unlocked: true, children: ['2'], icon: { lib: 'MCI', name: 'flag-checkered' } },
+  { id: '2', name: 'Logika', unlocked: true, children: ['3', '4'], icon: { lib: 'IO', name: 'git-merge' } },
+  { id: '3', name: 'Database', unlocked: false, children: ['5'], icon: { lib: 'IO', name: 'server' } },
+  { id: '4', name: 'UI Design', unlocked: false, children: [], icon: { lib: 'IO', name: 'phone-portrait' } },
+  { id: '5', name: 'API', unlocked: false, children: ['6'], icon: { lib: 'IO', name: 'cloud-upload' } },
+  { id: '6', name: 'Deploy', unlocked: false, children: [], icon: { lib: 'IO', name: 'rocket' } },
 ];
 
 const IconRenderer = ({ lib, name, size, color }) => {
@@ -43,7 +46,7 @@ const IconRenderer = ({ lib, name, size, color }) => {
   }
 };
 
-const CONFIG = { nodeRadius: 35, siblingGap: 70, levelGap: 140 };
+const CONFIG = { nodeRadius: 35, siblingGap: 80, levelGap: 140 };
 
 function layoutAdaptive(flatSkills, rootId) {
   const nodeMap = new Map();
@@ -62,7 +65,6 @@ function layoutAdaptive(flatSkills, rootId) {
   });
 
   let currentLeafX = 0;
-
   function calculatePosition(node, depth) {
     node.position.y = depth * CONFIG.levelGap;
     if (node.children.length === 0) {
@@ -79,14 +81,6 @@ function layoutAdaptive(flatSkills, rootId) {
   const rootNode = nodeMap.get(rootId) || nodeMap.get(flatSkills[0]?.id);
   if (rootNode) calculatePosition(rootNode, 0);
 
-  let maxY = 0;
-  nodeMap.forEach((node) => {
-    if (node.position.y > maxY) maxY = node.position.y;
-  });
-  nodeMap.forEach((node) => {
-    node.position.y = maxY - node.position.y;
-  });
-
   const result = [];
   function flattenResult(node) {
     if (result.find((n) => n.id === node.id)) return;
@@ -99,10 +93,8 @@ function layoutAdaptive(flatSkills, rootId) {
 }
 
 function calculateBounds(skills) {
-  let minX = Infinity; let maxX = -Infinity;
-  let minY = Infinity; let maxY = -Infinity;
   if (skills.length === 0) return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
-
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   skills.forEach((s) => {
     if (s.position.x < minX) minX = s.position.x;
     if (s.position.x > maxX) maxX = s.position.x;
@@ -112,117 +104,61 @@ function calculateBounds(skills) {
   return { minX, maxX, minY, maxY };
 }
 
-// === COMPONENT UTAMA ===
-export default function SkillTree({ route }) {
+export default function SkillTree({ route, navigation }) {
   const systemScheme = useColorScheme();
   const [isDarkMode, setIsDarkMode] = useState(systemScheme === 'dark');
-
   const { skillTreeData, taskId } = route.params || {};
-
-  const initialRawData = skillTreeData || DEFAULT_DATA;
+  const initialRawData = skillTreeData || ADAPTED_DATA;
 
   const [skills, setSkills] = useState(() =>
-    layoutAdaptive(JSON.parse(JSON.stringify(initialRawData)), 'orientasi')
+    layoutAdaptive(JSON.parse(JSON.stringify(initialRawData)), '1')
   );
 
-  // --- FUNGSI SAVE KE FIRESTORE (VERSI FIX) ---
   const saveProgressToFirestore = async (updatedSkills) => {
     if (!taskId) return;
-
     try {
       const user = auth.currentUser;
       if (!user) return;
-
-      // === LANGKAH PEMBERSIHAN (SANITIZING) ===
-      // Kita ubah kembali struktur data agar sesuai format Firestore
-      const cleanData = updatedSkills.map((node) => {
-
-        // 1. Perbaiki array 'children'
-        // Jika isinya object (karena layoutAdaptive), ambil ID-nya saja.
-        // Jika isinya sudah string, biarkan saja.
-        const cleanChildren = node.children
-          ? node.children.map(child => (typeof child === 'object' ? child.id : child))
-          : [];
-
-        // 2. Return objek bersih
-        return {
-          id: node.id,
-          name: node.name,
-          unlocked: node.unlocked,
-          children: cleanChildren, // <-- Sekarang isinya hanya ["id1", "id2"]
+      const cleanData = updatedSkills.map((node) => ({
+          id: node.id, name: node.name, unlocked: node.unlocked, 
+          children: node.children ? node.children.map(c => c.id) : [], 
           icon: node.icon
-        };
-      });
-
+      }));
       const taskDocRef = doc(db, "users", user.uid, "tasks", taskId);
-
-      // Update dokumen
-      await updateDoc(taskDocRef, {
-        skillTreeData: cleanData
-      });
-
-      console.log("Progress berhasil disimpan ke Firestore!");
-    } catch (error) {
-      console.error("Gagal menyimpan progress:", error);
-      Alert.alert("Error Save", "Gagal menyimpan progress ke server.");
-    }
+      await updateDoc(taskDocRef, { skillTreeData: cleanData });
+    } catch (error) { console.error("Gagal simpan:", error); }
   };
 
-  const PADDING = 100;
-
+  const PADDING = 200; 
   const [canvasInfo] = useState(() => {
     const bounds = calculateBounds(skills);
-    const w = (bounds.maxX - bounds.minX + PADDING * 2) * 1.2;
-    const h = (bounds.maxY - bounds.minY + PADDING * 2) * 1.2;
+    const treeWidth = bounds.maxX - bounds.minX;
+    const realTreeCenterX = (bounds.minX + bounds.maxX) / 2;
+    
     return {
-      w: Math.max(w, width),
-      h: Math.max(h, height),
-      offsetX: -bounds.minX + PADDING,
-      offsetY: -bounds.minY + PADDING
+      w: Math.max(treeWidth + PADDING * 2, width * 1.5),
+      h: Math.max(bounds.maxY + PADDING * 2, height * 1.5),
+      offsetX: PADDING,
+      offsetY: 120, 
+      realTreeCenterX   
     };
   });
 
-  const minScrollX = -(canvasInfo.w - width);
-  const minScrollY = -(canvasInfo.h - height);
-  const maxScrollX = 0;
-  const maxScrollY = 0;
+  const initialX = (width / 2) - (canvasInfo.realTreeCenterX + canvasInfo.offsetX);
+  
+  const pan = useRef(new Animated.ValueXY({ x: initialX, y: 0 })).current;
 
-  const initialY = minScrollY > 0 ? 0 : minScrollY + 100;
-  const clampedInitialY = Math.min(maxScrollY, Math.max(minScrollY, initialY));
-
-  const pan = useRef(new Animated.ValueXY({ x: 0, y: clampedInitialY })).current;
-  const lastOffset = useRef({ x: 0, y: clampedInitialY });
-
-  // === PERBAIKAN DI BAGIAN INI (PAN RESPONDER) ===
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gestureState) => {
         return Math.abs(gestureState.dx) > 5 || Math.abs(gestureState.dy) > 5;
       },
-      onPanResponderGrant: () => { },
-      onPanResponderMove: (_, gestureState) => {
-        let newX = lastOffset.current.x + gestureState.dx;
-        let newY = lastOffset.current.y + gestureState.dy;
-
-        if (newX > maxScrollX) newX = maxScrollX;
-        if (newX < minScrollX) newX = minScrollX;
-
-        if (newY > maxScrollY) newY = maxScrollY;
-        if (newY < minScrollY) newY = minScrollY;
-
-        pan.setValue({ x: newX, y: newY });
+      onPanResponderGrant: () => { 
+        pan.setOffset({ x: pan.x._value, y: pan.y._value });
+        pan.setValue({ x: 0, y: 0 });
       },
-      onPanResponderRelease: (_, gestureState) => {
-        let finalX = lastOffset.current.x + gestureState.dx;
-        let finalY = lastOffset.current.y + gestureState.dy;
-
-        if (finalX > maxScrollX) finalX = maxScrollX;
-        if (finalX < minScrollX) finalX = minScrollX;
-        if (finalY > maxScrollY) finalY = maxScrollY;
-        if (finalY < minScrollY) finalY = minScrollY;
-
-        lastOffset.current = { x: finalX, y: finalY };
-      },
+      onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
+      onPanResponderRelease: () => { pan.flattenOffset(); },
     })
   ).current;
 
@@ -231,14 +167,9 @@ export default function SkillTree({ route }) {
       Alert.alert('INFO', `Skill "${tappedSkill.name}" sudah dikuasai!`);
       return;
     }
-    const parent = skills.find((s) =>
-      s.children.some((child) => child.id === tappedSkill.id)
-    );
-
+    const parent = skills.find((s) => s.children.some((child) => child.id === tappedSkill.id));
     if (!parent || (parent && parent.unlocked)) {
-      const newSkills = skills.map((s) =>
-        s.id === tappedSkill.id ? { ...s, unlocked: true } : s
-      );
+      const newSkills = skills.map((s) => s.id === tappedSkill.id ? { ...s, unlocked: true } : s);
       setSkills(newSkills);
       saveProgressToFirestore(newSkills);
       Alert.alert('SELAMAT!', `Kamu membuka skill: ${tappedSkill.name}`);
@@ -247,6 +178,7 @@ export default function SkillTree({ route }) {
     }
   };
 
+  // === TEMA WARNA SESUAI CONTOH ANDA (NEO / CYBER) ===
   const THEMES = {
     light: {
       bg: '#F4F3EF', stroke: '#000000', locked: '#fbe145', unlocked: '#4cdd7c',
@@ -270,44 +202,69 @@ export default function SkillTree({ route }) {
         {...panResponder.panHandlers}
       >
         <View style={{ width: canvasInfo.w, height: canvasInfo.h }}>
-          <Svg width={canvasInfo.w} height={canvasInfo.h} style={StyleSheet.absoluteFill}>
-            {skills.map((s) =>
-              s.children.map((child) => (
-                <Line
-                  key={`${s.id}-${child.id}`}
-                  x1={s.position.x + canvasInfo.offsetX}
-                  y1={s.position.y + canvasInfo.offsetY}
-                  x2={child.position.x + canvasInfo.offsetX}
-                  y2={child.position.y + canvasInfo.offsetY}
-                  stroke={activeColors.stroke}
-                  strokeWidth="4"
-                />
-              ))
-            )}
-          </Svg>
-
+          
+          {/* GARIS PENGHUBUNG (STYLE TEBAL) */}
           {skills.map((s) => {
-            const left = s.position.x + canvasInfo.offsetX - 35;
+            const parentX = s.position.x + canvasInfo.offsetX;
+            const parentY = s.position.y + canvasInfo.offsetY;
+
+            return s.children.map(child => {
+               const childX = child.position.x + canvasInfo.offsetX;
+               const childY = child.position.y + canvasInfo.offsetY;
+               const deltaX = childX - parentX;
+               const deltaY = childY - parentY;
+               const length = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+               const angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
+
+               return (
+                 <View
+                   key={`line-${s.id}-${child.id}`}
+                   style={{
+                     position: 'absolute',
+                     left: (parentX + childX) / 2 - (length / 2),
+                     top: (parentY + childY) / 2,
+                     width: length,
+                     height: 4, // GARIS LEBIH TEBAL
+                     backgroundColor: activeColors.stroke,
+                     transform: [{ rotate: `${angle}deg` }]
+                   }}
+                 />
+               );
+            });
+          })}
+
+          {/* NODE LINGKARAN (STYLE NEO) */}
+          {skills.map((s) => {
+            const left = s.position.x + canvasInfo.offsetX - 35; 
             const top = s.position.y + canvasInfo.offsetY - 35;
+            
             return (
               <Pressable
                 key={s.id}
                 style={[styles.nodeContainer, { left, top }]}
                 onPress={() => handleSkillTap(s)}
               >
+                {/* Bayangan Kasar (Hard Shadow) */}
                 <View style={[styles.circleBase, styles.shadowCircle, { backgroundColor: activeColors.shadow }]} />
+                
+                {/* Lingkaran Utama dengan Border Tebal */}
                 <View style={[
                   styles.circleBase, styles.mainCircle,
-                  { backgroundColor: s.unlocked ? activeColors.unlocked : activeColors.locked, borderColor: activeColors.stroke }
+                  { 
+                    backgroundColor: s.unlocked ? activeColors.unlocked : activeColors.locked, 
+                    borderColor: activeColors.stroke 
+                  }
                 ]}>
                   <IconRenderer
-                    lib={s.icon?.lib} name={s.icon?.name} size={32}
+                    lib={s.icon?.lib} name={s.icon?.name} size={30}
                     color={s.unlocked ? activeColors.iconUnlocked : activeColors.iconLocked}
                   />
                 </View>
+
+                {/* Label dengan Style Tag */}
                 <View style={[styles.labelContainer, { backgroundColor: activeColors.tagBg }]}>
                   <Text style={[styles.labelText, { color: activeColors.tagText }]}>
-                    {s.name.length > 18 ? s.name.substring(0, 16) + '..' : s.name.toUpperCase()}
+                    {s.name.toUpperCase()}
                   </Text>
                 </View>
               </Pressable>
@@ -316,34 +273,85 @@ export default function SkillTree({ route }) {
         </View>
       </Animated.View>
 
+      {/* === UI OVERLAY STYLE NEO === */}
+
+      {/* Tombol Back */}
+      <TouchableOpacity 
+        style={[styles.neoButton, styles.backButton, { backgroundColor: '#ff4757', borderColor: activeColors.stroke, shadowColor: activeColors.shadow }]} 
+        onPress={() => navigation.goBack()}
+      >
+        <Ionicons name="arrow-back" size={24} color="white" />
+      </TouchableOpacity>
+
+      {/* Info Card */}
       <View style={styles.overlay} pointerEvents="none">
         <View style={[styles.neoCard, { backgroundColor: activeColors.cardBg, borderColor: activeColors.stroke, shadowColor: activeColors.shadow }]}>
-          <Text style={[styles.neoText, { color: activeColors.text }]}>{taskId ? "PROGRESS SAVED" : "PREVIEW MODE"}</Text>
-          <Text style={[styles.neoSubText, { color: activeColors.text }]}>{isDarkMode ? 'Cyber Mode' : 'Paper Mode'}</Text>
+          <Text style={[styles.neoText, { color: activeColors.text }]}>SKILL TREE</Text>
+          <Text style={[styles.neoSubText, { color: activeColors.text }]}>{isDarkMode ? 'Mode: Cyber' : 'Mode: Paper'}</Text>
         </View>
       </View>
 
+      {/* Tombol Toggle Theme */}
       <TouchableOpacity
-        style={[styles.toggleButton, { backgroundColor: activeColors.cardBg, borderColor: activeColors.stroke, shadowColor: activeColors.shadow }]}
+        style={[styles.neoButton, styles.toggleButton, { backgroundColor: activeColors.cardBg, borderColor: activeColors.stroke, shadowColor: activeColors.shadow }]}
         onPress={() => setIsDarkMode(!isDarkMode)}
       >
         <Feather name={isDarkMode ? "sun" : "moon"} size={24} color={activeColors.text} />
       </TouchableOpacity>
+      
+      {/* Tombol Reset Center */}
+      <TouchableOpacity
+        style={[styles.neoButton, styles.resetButton, { backgroundColor: activeColors.cardBg, borderColor: activeColors.stroke, shadowColor: activeColors.shadow }]}
+        onPress={() => {
+           Animated.spring(pan, { toValue: { x: initialX, y: 0 }, useNativeDriver: false }).start();
+        }}
+      >
+        <MaterialIcons name="center-focus-strong" size={24} color={activeColors.text} />
+      </TouchableOpacity>
+
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, overflow: 'hidden' },
-  nodeContainer: { position: 'absolute', width: 70, height: 70, justifyContent: 'center', alignItems: 'center' },
-  circleBase: { position: 'absolute', width: 70, height: 70, borderRadius: 35, borderWidth: 4 },
-  shadowCircle: { top: 6, left: 6 },
+  
+  nodeContainer: { position: 'absolute', width: 70, height: 70, justifyContent: 'center', alignItems: 'center', zIndex: 20 },
+  
+  // Style Lingkaran Neo (Border Tebal)
+  circleBase: { position: 'absolute', width: 70, height: 70, borderRadius: 35, borderWidth: 4 }, // Border tebal 4px
+  
+  // Bayangan Kasar (Hard Shadow)
+  shadowCircle: { top: 6, left: 6, opacity: 1 }, // Opacity 1 agar solid (neo style)
+  
   mainCircle: { justifyContent: 'center', alignItems: 'center', top: 0, left: 0 },
-  labelContainer: { position: 'absolute', top: 75, paddingHorizontal: 6, paddingVertical: 4, minWidth: 100, alignItems: 'center' },
-  labelText: { fontSize: 11, fontWeight: 'bold', fontFamily: 'monospace' },
-  overlay: { position: 'absolute', top: 50, left: 20 },
-  toggleButton: { position: 'absolute', top: 50, right: 20, width: 50, height: 50, justifyContent: 'center', alignItems: 'center', borderWidth: 3, shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 0 },
-  neoCard: { borderWidth: 3, padding: 10, shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 0 },
-  neoText: { fontWeight: '900', fontSize: 16 },
-  neoSubText: { fontSize: 12, fontWeight: 'bold', marginTop: 4, opacity: 0.7 }
+  
+  // Label Style Tag
+  labelContainer: { 
+    position: 'absolute', top: 75, paddingHorizontal: 6, paddingVertical: 4, 
+    minWidth: 80, alignItems: 'center', borderWidth: 0 
+  },
+  labelText: { fontSize: 11, fontWeight: 'bold', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
+  
+  // Overlay UI Styles
+  overlay: { position: 'absolute', top: 60, left: 20 },
+  
+  neoCard: { 
+    borderWidth: 3, padding: 10, 
+    shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 0 
+  },
+  neoText: { fontWeight: '900', fontSize: 16, letterSpacing: 1 },
+  neoSubText: { fontSize: 12, fontWeight: 'bold', marginTop: 4, opacity: 0.7 },
+
+  // Tombol Gaya Neo (Kotak/Bulat dengan Border Tebal & Bayangan Kasar)
+  neoButton: {
+    position: 'absolute', width: 50, height: 50, 
+    justifyContent: 'center', alignItems: 'center', 
+    borderRadius: 25, borderWidth: 3,
+    shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 0
+  },
+
+  toggleButton: { top: 60, right: 20, zIndex: 30 },
+  resetButton: { top: 130, right: 20, zIndex: 30 },
+  backButton: { bottom: 40, left: 20, zIndex: 30 }
 });
