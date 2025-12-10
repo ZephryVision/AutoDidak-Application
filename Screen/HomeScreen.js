@@ -122,11 +122,14 @@ export default function HomeScreen({ navigation }) {
 
       {/* 2. PROFILE PICTURE & NAME */}
       <View style={styles.profileSection}>
+
         <View style={styles.avatarContainer}>
+
           <Image
             source={{ uri: 'https://api.dicebear.com/7.x/avataaars/png?seed=Ryker' }} // Placeholder Avatar
             style={styles.avatarImage}
           />
+
         </View>
         <View style={styles.nameRow}>
           <Text style={styles.nameText}>{displayName}</Text>
@@ -180,32 +183,38 @@ export default function HomeScreen({ navigation }) {
 
   // --- RENDER ITEM (KARTU TUGAS GRID) ---
   const renderCard = ({ item, index }) => {
-    // Selang seling warna background card (Ungu -> Biru)
     const cardColor = index % 2 === 0 ? COLORS.accent1 : COLORS.accent2;
 
     return (
-      <TouchableOpacity
-        style={[styles.cardContainer, { backgroundColor: cardColor }]}
-        onPress={() => navigation.navigate('SkillTree', {
-          skillTreeData: item.skillTreeData,
-          taskId: item.id
-        })}
-        onLongPress={() => handleDeleteTask(item.id)} // Tahan lama untuk hapus
-      >
+      // 1. WRAPPER UTAMA (Container Pembungkus)
+      <View style={styles.gridItemWrapper}>
 
-        <View style={styles.cardIconContainer}>
-          <MaterialCommunityIcons name="code-tags" size={32} color="white" />
-        </View>
+        {/* 2. LAPISAN BAYANGAN (Kotak Hitam di Belakang) */}
+        <View style={styles.hardShadow} />
 
-        <View style={styles.cardContent}>
-          <View style={styles.cardFooter}>
-            <Text style={styles.cardTitle} numberOfLines={2}>{item.name}</Text>
-            {/* <Text style={styles.cardTime}>2h : 10m</Text> */}
-            {/* <MaterialCommunityIcons name="arrow-right" size={16} color="white" /> */}
+        {/* 3. KARTU ASLI (Ditaruh di atas bayangan) */}
+        <TouchableOpacity
+          style={[styles.cardContainer, { backgroundColor: cardColor }]}
+          onPress={() => navigation.navigate('SkillTree', {
+            skillTreeData: item.skillTreeData,
+            taskId: item.id
+          })}
+          onLongPress={() => handleDeleteTask(item.id)}
+          activeOpacity={0.9} // Efek pencet biar tidak terlalu transparan
+        >
+          <View style={styles.cardIconContainer}>
+            <MaterialCommunityIcons name="code-tags" size={32} color="white" />
           </View>
-        </View>
-      </TouchableOpacity>
 
+          <View style={styles.cardContent}>
+            <View style={styles.cardFooter}>
+              <Text style={styles.cardTitle} numberOfLines={2}>{item.name}</Text>
+            </View>
+          </View>
+      <View style={{ height:200 }} />
+
+        </TouchableOpacity>
+      </View>
     );
   };
 
@@ -219,7 +228,6 @@ export default function HomeScreen({ navigation }) {
         ListHeaderComponent={ProfileHeader}
         columnWrapperStyle={{ justifyContent: 'space-between', paddingHorizontal: 20 }}
       />
-
       {/* MODAL INPUT UNTUK NAMBAH TUGAS */}
       <Modal transparent visible={isModalVisible} animationType="slide">
         <View style={styles.modalOverlay}>
@@ -251,13 +259,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.bg,
+
   },
   listContent: {
-    // paddingBottom: 5,
     paddingHorizontal: 20,
+    paddingBottom: 10, // Tambah padding bawah agar scroll enak
+
   },
   headerWrapper: {
     marginBottom: 20,
+
   },
   // 1. BANNER
   bannerContainer: {
@@ -272,14 +283,14 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
-    
+
   },
   // 2. PROFILE
   profileSection: {
     alignItems: 'center',
     marginTop: -80, // Menarik ke atas menimpa banner
     marginBottom: 20,
-    
+
   },
   avatarContainer: {
     width: 100,
@@ -292,11 +303,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10,
     overflow: 'hidden',
-    shadowColor: "#000",
-    shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 5,
   },
   avatarImage: {
     width: '90%',
@@ -372,11 +378,10 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: COLORS.border,
     marginRight: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 5,
+    // HAPUS SHADOW/ELEVATION BAWAAN
+    // GANTI DENGAN BORDER TEBAL DI BAWAH & KANAN (Cara termudah untuk Android)
+    borderBottomWidth: 6,
+    borderRightWidth: 6,
   },
   yellowButtonText: {
     fontSize: 16,
@@ -399,7 +404,6 @@ const styles = StyleSheet.create({
   },
   // 5. ACTIVITY SECTION
   sectionHeader: {
-    // marginBottom: 15,
     alignItems: 'flex-start',
   },
   highlightUnderline: {
@@ -414,20 +418,30 @@ const styles = StyleSheet.create({
     marginBottom: -4, // Agar teks menimpa garis bawah
   },
   // 6. CARDS (TASKS)
+  gridItemWrapper: {
+    width: '48%',
+    aspectRatio: 1,
+    marginBottom: 20, // Jarak antar baris
+    position: 'relative', // Penting untuk absolute positioning
+  },
+  hardShadow: {
+    position: 'absolute',
+    top: 6,   // Geser ke bawah
+    left: 6,  // Geser ke kanan
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'black', // Warna bayangan
+    borderRadius: 16,
+  },
+
   cardContainer: {
-    width: '48%', // Grid 2 kolom
-    aspectRatio: 1, // Tinggi sedikit lebih besar dari lebar
+    width: '100%',
+    height: '100%',
     borderRadius: 16,
     borderWidth: 2,
     borderColor: COLORS.border,
     padding: 15,
-    marginBottom: 15,
     justifyContent: 'space-between',
-    shadowColor: "#000",
-    shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 5,
   },
   cardIconContainer: {
     width: 50,
@@ -509,9 +523,9 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     backgroundColor: COLORS.primary,
   },
-  logout:{
+  logout: {
     color: 'red',
-    fontSize:12,
-    marginTop:5
+    fontSize: 12,
+    marginTop: 5
   }
 });
