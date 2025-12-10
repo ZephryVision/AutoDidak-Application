@@ -56,7 +56,8 @@ export default function App() {
             <Stack.Screen
               name="Home"
               component={HomeScreen}
-              options={{ title: 'Kuasai Skill Berikutnya' }} // Judul di header
+              options={{ title: 'Kuasai Skill Berikutnya', headerShown: false }} // Judul di header
+              
             />
             <Stack.Screen
               name="SkillTree"

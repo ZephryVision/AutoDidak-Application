@@ -1,19 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, FlatList, Alert, TouchableOpacity } from 'react-native';
+import {
+  View, Image, Text, TextInput, StyleSheet, FlatList,
+  Alert, TouchableOpacity, Dimensions, Modal
+} from 'react-native';
 import { db, auth } from '../firebaseConfig';
 import {
-  collection,
-  addDoc,
-  onSnapshot,
-  query,
-  doc,
-  updateDoc,
-  deleteDoc
+  collection, addDoc, onSnapshot, query, doc, updateDoc, deleteDoc
 } from "firebase/firestore";
 import { signOut } from 'firebase/auth';
-import { globalStyles, Colors } from '../Styles/GlobalStyles';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
-// === TEMPLATE SKILL TREE ===
+// --- KONFIGURASI WARNA & DIMENSI ---
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const COLORS = {
+  bg: '#FFFDF5',      // Cream background
+  primary: '#EAFF54', // Kuning terang (tombol utama)
+  accent1: '#9A89FF', // Ungu (kartu 1)
+  accent2: '#89EFFF', // Biru (kartu 2)
+  border: '#000000',  // Hitam pekat untuk border
+  white: '#FFFFFF',
+};
+
+// Data Skill Tree (Tetap sama seperti kodemu)
 const DEFAULT_SKILL_TREE = [
   { id: 'orientasi', name: 'Orientasi Awal', unlocked: true, children: ['algoritma_dasar', 'pemrograman_dasar'], icon: { lib: 'MCI', name: 'flag-checkered' } },
   { id: 'algoritma_dasar', name: 'Algoritma & Logika', unlocked: false, children: ['representasi_algoritma', 'struktur_dasar_algoritma'], icon: { lib: 'MCI', name: 'brain' } },
@@ -38,19 +46,26 @@ const DEFAULT_SKILL_TREE = [
 export default function HomeScreen({ navigation }) {
   const [taskName, setTaskName] = useState('');
   const [tasks, setTasks] = useState([]);
-
+  const [isModalVisible, setModalVisible] = useState(false);
+  const [displayName, setDisplayName] = useState('Loading...');
   const handleLogout = () => {
     signOut(auth).catch(error => console.error('Error logging out: ', error));
   };
+  useEffect(() => {
+    const user = auth.currentUser;
 
-  React.useLayoutEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <Button onPress={handleLogout} title="Logout" color={Colors.danger} />
-      ),
-    });
-  }, [navigation]);
+    if (user && user.email) {
+      // 1. Ambil bagian depan email (sebelum @)
+      const emailName = user.email.split('@')[0];
 
+      // 2. (Opsional) Bikin huruf pertama jadi Kapital agar rapi
+      const formattedName = emailName.charAt(0).toUpperCase() + emailName.slice(1);
+
+      setDisplayName(formattedName);
+    } else {
+      setDisplayName('Tamu');
+    }
+  }, []);
   useEffect(() => {
     const user = auth.currentUser;
     if (!user) return;
@@ -67,7 +82,7 @@ export default function HomeScreen({ navigation }) {
 
   const handleAddTask = async () => {
     if (taskName.trim() === '') {
-      Alert.alert('Error', 'Nama tugas tidak boleh kosong');
+      Alert.alert('Error', 'Nama materi tidak boleh kosong');
       return;
     }
     try {
@@ -80,22 +95,9 @@ export default function HomeScreen({ navigation }) {
         skillTreeData: DEFAULT_SKILL_TREE
       });
       setTaskName('');
+      setModalVisible(false); // Tutup modal setelah add
     } catch (e) {
-      console.error("Error menambah data: ", e);
       Alert.alert('Error', 'Gagal menambah data');
-    }
-  };
-
-  const handleUpdateTask = async (taskId, currentCompletedStatus) => {
-    const user = auth.currentUser;
-    if (!user) return;
-    const taskRef = doc(db, "users", user.uid, "tasks", taskId);
-    try {
-      await updateDoc(taskRef, {
-        completed: !currentCompletedStatus
-      });
-    } catch (e) {
-      console.error("Error update data: ", e);
     }
   };
 
@@ -103,166 +105,413 @@ export default function HomeScreen({ navigation }) {
     const user = auth.currentUser;
     if (!user) return;
     const taskRef = doc(db, "users", user.uid, "tasks", taskId);
-    try {
-      await deleteDoc(taskRef);
-    } catch (e) {
-      console.error("Error delete data: ", e);
-    }
+    try { await deleteDoc(taskRef); } catch (e) { console.error(e); }
   };
 
-  const renderItem = ({ item }) => (
-    <View style={localStyles.taskItem}>
-      {/* 1. JUDUL */}
-      <View style={localStyles.headerContainer}>
-        <Text style={[
-          localStyles.taskText,
-          item.completed ? localStyles.taskCompleted : null
-        ]}>
-          {item.name}
-        </Text>
+  // --- KOMPONEN HEADER (Profil, Stats, Tombol) ---
+  const ProfileHeader = () => (
+    <View style={styles.headerWrapper}>
+      {/* 1. BACKGROUND IMAGE */}
+      <View style={styles.bannerContainer}>
+        <Image
+          source={require('../assets/images/image.png')} // Pastikan path benar
+          style={styles.bannerImage}
+        />
+        {/* Overlay gradient/shadow jika perlu */}
       </View>
 
-      {/* 2. TOMBOL PROGRESS */}
+      {/* 2. PROFILE PICTURE & NAME */}
+      <View style={styles.profileSection}>
+        <View style={styles.avatarContainer}>
+          <Image
+            source={{ uri: 'https://api.dicebear.com/7.x/avataaars/png?seed=Ryker' }} // Placeholder Avatar
+            style={styles.avatarImage}
+          />
+        </View>
+        <View style={styles.nameRow}>
+          <Text style={styles.nameText}>{displayName}</Text>
+          {/* <Ionicons name="checkmark-circle" size={24} color="#C1E14F" style={{ marginLeft: 5 }} /> */}
+
+        </View>
+        <TouchableOpacity onPress={handleLogout}>
+          <Text style={styles.logout}>Logout</Text>
+        </TouchableOpacity>
+        {/* 
+        <Text style={styles.bioText}>
+          Saya memiliki kemampuan dalam pemrograman front-end dan back-end, serta memahami konsep database.
+        </Text> */}
+      </View>
+
+      {/* 3. STATS BOXES */}
+      {/* <View style={styles.statsRow}>
+        <View style={styles.statBox}>
+          <Text style={styles.statValue}>343</Text>
+          <Text style={styles.statLabel}>Koneksi</Text>
+        </View>
+        <View style={styles.statBox}>
+          <Text style={styles.statValue}>{tasks.filter(t => t.completed).length}/{tasks.length}</Text>
+          <Text style={styles.statLabel}>Progress</Text>
+        </View>
+        <View style={styles.statBox}>
+          <Text style={styles.statValue}>30 Mn</Text>
+          <Text style={styles.statLabel}>Online</Text>
+        </View>
+      </View> */}
+
+      {/* 4. ACTION BUTTON (Mulai Cari Materimu...) */}
+
+      <View style={styles.listContent}>
+        <View style={styles.actionRow}>
+          <TouchableOpacity style={styles.yellowButton} onPress={() => setModalVisible(true)}>
+            <Text style={styles.yellowButtonText}>Mulai Cari Materimu</Text>
+            <Ionicons name="add" size={24} color="black" />
+          </TouchableOpacity>
+        </View>
+
+        {/* 5. SECTION TITLE */}
+        <View style={styles.sectionHeader}>
+          <View style={styles.highlightUnderline}>
+            <Text style={styles.sectionTitle}>Riwayat Aktivitas</Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+
+  // --- RENDER ITEM (KARTU TUGAS GRID) ---
+  const renderCard = ({ item, index }) => {
+    // Selang seling warna background card (Ungu -> Biru)
+    const cardColor = index % 2 === 0 ? COLORS.accent1 : COLORS.accent2;
+
+    return (
       <TouchableOpacity
-        style={localStyles.progressButton}
+        style={[styles.cardContainer, { backgroundColor: cardColor }]}
         onPress={() => navigation.navigate('SkillTree', {
           skillTreeData: item.skillTreeData,
           taskId: item.id
         })}
+        onLongPress={() => handleDeleteTask(item.id)} // Tahan lama untuk hapus
       >
-        <Text style={localStyles.progressButtonText}>
-          🚀 LIHAT SKILL TREE
-        </Text>
+
+        <View style={styles.cardIconContainer}>
+          <MaterialCommunityIcons name="code-tags" size={32} color="white" />
+        </View>
+
+        <View style={styles.cardContent}>
+          <View style={styles.cardFooter}>
+            <Text style={styles.cardTitle} numberOfLines={2}>{item.name}</Text>
+            {/* <Text style={styles.cardTime}>2h : 10m</Text> */}
+            {/* <MaterialCommunityIcons name="arrow-right" size={16} color="white" /> */}
+          </View>
+        </View>
       </TouchableOpacity>
 
-      {/* 3. TOMBOL AKSI */}
-      <View style={localStyles.actionContainer}>
-        {/* Tombol Kiri (Selesai/Batal) */}
-        <TouchableOpacity
-          style={[localStyles.actionButton, localStyles.updateButton]}
-          onPress={() => handleUpdateTask(item.id, item.completed)}
-        >
-          <Text style={localStyles.buttonText} numberOfLines={1}>
-            {item.completed ? '↩ Batal' : '✓ Selesai'}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Spacer (Jarak Pengganti Gap) */}
-        <View style={{ width: 10 }} />
-
-        {/* Tombol Kanan (Hapus) */}
-        <TouchableOpacity
-          style={[localStyles.actionButton, localStyles.deleteButton]}
-          onPress={() => handleDeleteTask(item.id)}
-        >
-          <Text style={localStyles.buttonText} numberOfLines={1}>🗑 Hapus</Text>
-        </TouchableOpacity>
-      </View>
-
-    </View>
-  );
+    );
+  };
 
   return (
-    <View style={localStyles.container}>
-      <TextInput
-        style={globalStyles.input}
-        placeholder="Nama Topik Baru..."
-        onChangeText={setTaskName}
-        value={taskName}
-      />
-
-      {taskName.trim().length > 0 && (
-        <View style={{ marginBottom: 20 }}>
-          <Button
-            title="Buat Kurikulum"
-            onPress={handleAddTask}
-            color={Colors.primary}
-          />
-        </View>
-      )}
-
+    <View style={styles.container}>
       <FlatList
         data={tasks}
-        renderItem={renderItem}
+        renderItem={renderCard}
         keyExtractor={item => item.id}
-        contentContainerStyle={localStyles.listContent}
+        numColumns={2} // Grid 2 Kolom
+        ListHeaderComponent={ProfileHeader}
+        columnWrapperStyle={{ justifyContent: 'space-between', paddingHorizontal: 20 }}
       />
+
+      {/* MODAL INPUT UNTUK NAMBAH TUGAS */}
+      <Modal transparent visible={isModalVisible} animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Tambah Materi Baru</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Contoh: Algoritma Lanjut..."
+              value={taskName}
+              onChangeText={setTaskName}
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.cancelButton}>
+                <Text>Batal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleAddTask} style={styles.saveButton}>
+                <Text style={{ fontWeight: 'bold' }}>Simpan</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
-const localStyles = StyleSheet.create({
+// --- STYLING NEUBRUTALISM ---
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: COLORS.bg,
   },
   listContent: {
-    paddingBottom: 50,
+    // paddingBottom: 5,
+    paddingHorizontal: 20,
   },
-  taskItem: {
-    backgroundColor: Colors.white,
-    padding: 15,
+  headerWrapper: {
+    marginBottom: 20,
+  },
+  // 1. BANNER
+  bannerContainer: {
+    height: 180,
+    width: '100%',
+    overflow: 'hidden',
+    borderBottomWidth: 3,
+    borderColor: COLORS.border,
+    marginBottom: 30, // Memberi ruang untuk Avatar yang "nongol"
+  },
+  bannerImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+    
+  },
+  // 2. PROFILE
+  profileSection: {
+    alignItems: 'center',
+    marginTop: -80, // Menarik ke atas menimpa banner
+    marginBottom: 20,
+    
+  },
+  avatarContainer: {
+    width: 100,
+    height: 100,
+    backgroundColor: 'white',
+    borderRadius: 16,
+    borderWidth: 3,
+    borderColor: COLORS.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+    overflow: 'hidden',
+    shadowColor: "#000",
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 5,
+  },
+  avatarImage: {
+    width: '90%',
+    height: '90%',
+    resizeMode: 'contain',
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    // marginBottom: 4,
+  },
+  nameText: {
+    fontSize: 22,
+    fontWeight: '900', // Sangat tebal
+    color: COLORS.border,
+  },
+  subText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  bioText: {
+    textAlign: 'center',
+    fontSize: 13,
+    color: '#444',
+    paddingHorizontal: 30,
+    lineHeight: 18,
+  },
+  // 3. STATS
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  statBox: {
+    backgroundColor: COLORS.white,
+    borderWidth: 2,
+    borderColor: COLORS.border,
     borderRadius: 12,
-    marginBottom: 15,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    width: '100%', // Pastikan kartu selebar container
+    paddingVertical: 10,
+    width: '31%', // Agar muat 3 kotak
+    alignItems: 'center',
+    // Shadow keras
+    shadowColor: "#000",
+    shadowOffset: { width: 3, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 4,
   },
-  headerContainer: {
-    marginBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    paddingBottom: 8,
+  statValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.border,
   },
-  taskText: {
+  statLabel: {
+    fontSize: 12,
+    color: '#666',
+  },
+  // 4. ACTION BUTTONS
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  yellowButton: {
+    flex: 1,
+    backgroundColor: COLORS.primary,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    marginRight: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 5,
+  },
+  yellowButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.border,
+  },
+  menuButton: {
+    width: 50,
+    height: 56, // Menyesuaikan tinggi tombol kuning
+    backgroundColor: COLORS.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+  },
+  // 5. ACTIVITY SECTION
+  sectionHeader: {
+    // marginBottom: 15,
+    alignItems: 'flex-start',
+  },
+  highlightUnderline: {
+    borderBottomWidth: 8, // Garis bawah tebal kuning
+    borderBottomColor: 'rgba(234, 255, 84, 0.6)', // Kuning semi transparan
+    paddingBottom: 0,
+  },
+  sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
-    flexWrap: 'wrap', // Pastikan teks turun ke bawah jika panjang
+    color: COLORS.border,
+    marginBottom: -4, // Agar teks menimpa garis bawah
   },
-  taskCompleted: {
-    textDecorationLine: 'line-through',
-    color: Colors.grey,
+  // 6. CARDS (TASKS)
+  cardContainer: {
+    width: '48%', // Grid 2 kolom
+    aspectRatio: 1, // Tinggi sedikit lebih besar dari lebar
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    padding: 15,
+    marginBottom: 15,
+    justifyContent: 'space-between',
+    shadowColor: "#000",
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 5,
   },
-  progressButton: {
-    backgroundColor: '#6200ee',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 12,
-    width: '100%', // Tombol selebar kartu
-  },
-  progressButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  // PERBAIKAN UTAMA DI SINI
-  actionContainer: {
-    flexDirection: 'row',
-    width: '100%',
-    // Saya hapus 'gap' dan 'justifyContent' agar kita atur manual dengan flex
-  },
-  actionButton: {
-    flex: 1, // Ini kuncinya: Memaksa tombol berbagi ruang 50:50
-    paddingVertical: 10,
-    borderRadius: 6,
-    alignItems: 'center',
+  cardIconContainer: {
+    width: 50,
+    height: 50,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 10,
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  updateButton: {
-    backgroundColor: Colors.primary,
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: 'black',
+    marginTop: 10,
   },
-  deleteButton: {
-    backgroundColor: Colors.danger,
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 5,
   },
-  buttonText: {
-    color: Colors.white,
-    fontWeight: '600',
-    fontSize: 14,
+  cardTime: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: 'bold',
+  },
+  // MODAL STYLES
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 5, height: 5 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  modalInput: {
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 16,
+    marginBottom: 20,
+    backgroundColor: '#F9F9F9',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  cancelButton: {
+    flex: 1,
+    padding: 12,
+    alignItems: 'center',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+  },
+  saveButton: {
+    flex: 1,
+    padding: 12,
+    alignItems: 'center',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.primary,
+  },
+  logout:{
+    color: 'red',
+    fontSize:12,
+    marginTop:5
   }
 });
