@@ -26,7 +26,7 @@ export default function LoginScreen({ navigation }) {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       console.log('Login sukses:', userCredential.user.email);
       setLoading(false);
-      navigation.replace("Home");
+      // navigation.replace("Home");
     } catch (error) {
       setLoading(false);
       console.error(error);
