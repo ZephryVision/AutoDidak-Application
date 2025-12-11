@@ -1,15 +1,5 @@
 {
   "expo": {
-<<<<<<< HEAD
-    "name": "myApp",
-    "slug": "myApp",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
-    "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-=======
     "name": "autodidak-expo",
     "slug": "autodidak-expo",
     "version": "1.0.0",
@@ -22,13 +12,11 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
->>>>>>> p/main
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-<<<<<<< HEAD
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
@@ -60,18 +48,5 @@
       "typedRoutes": true,
       "reactCompiler": true
     }
-=======
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "edgeToEdgeEnabled": true
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
-    "plugins": [
-      "expo-asset"
-    ]
->>>>>>> p/main
   }
 }

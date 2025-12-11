@@ -19,6 +19,8 @@
     "expo": "~54.0.27",
     "expo-asset": "~12.0.11",
     "expo-navigation-bar": "~5.0.10",
+    "expo-router": "^6.0.17",
+    "expo-splash-screen": "^31.0.12",
     "expo-status-bar": "~3.0.9",
     "firebase": "^12.5.0",
     "react": "19.1.0",
@@ -31,5 +33,8 @@
     "react-native-svg": "15.12.1",
     "react-native-web": "^0.21.0"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "typescript": "~5.9.2"
+  }
 }
