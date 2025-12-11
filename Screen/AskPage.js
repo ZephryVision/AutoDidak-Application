@@ -17,12 +17,14 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { db, auth } from '../firebaseConfig';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import {
   collection, addDoc, onSnapshot, query, doc, updateDoc, deleteDoc
 } from "firebase/firestore";
-import { signOut } from 'firebase/auth';
 
-const { width, height } = Dimensions.get('window');
+const API_KEY = "AIzaSyCrvWK0dyIXxbPsfIl6wxJSGSnqmTxqPhQ";
+const genAI = new GoogleGenerativeAI(API_KEY);
+
 
 export default function AskPage({ navigation }) {
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
@@ -33,6 +35,8 @@ export default function AskPage({ navigation }) {
     const hideSub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKeyboardVisible(false));
     return () => { showSub.remove(); hideSub.remove(); };
   }, []);
+
+
 
   const DEFAULT_SKILL_TREE = [
     { id: 'orientasi', name: 'Orientasi Awal', unlocked: true, children: ['algoritma_dasar', 'pemrograman_dasar'], icon: { lib: 'MCI', name: 'flag-checkered' } },
@@ -65,14 +69,90 @@ export default function AskPage({ navigation }) {
       return;
     }
 
+
+
     try {
       const user = auth.currentUser;
+      const model = genAI.getGenerativeModel({
+        model: "gemini-2.5-flash",
+        generationConfig: {
+          responseMimeType: "application/json",
+        }
+      });
+
+      const prompt = `
+        Anda adalah arsitek kurikulum coding yang ahli. Tugas Anda membuat roadmap belajar (Skill Tree) bertingkat untuk topik: "${question}".
+        
+        ATURAN STRICT OUTPUT (JANGAN DILANGGAR):
+        1. Keluaran HARUS berupa JSON Array murni. Jangan gunakan Markdown (\`\`\`json).
+        2. Gunakan Double Quotes (") untuk semua key dan value string. (Contoh: "id": "1").
+        3. Struktur Objek Wajib:
+          { 
+            "id": "string_unik_tanpa_spasi", 
+            "name": "Nama Skill (Maks 4 kata)", 
+            "unlocked": boolean, 
+            "children": ["array_id_node_anak"], 
+            "icon": { "lib": "MCI", "name": "string_nama_icon" }
+          }
+
+        4. LOGIKA NODE & HIERARKI:
+          - Node pertama (Root) harus "unlocked": true. Sisanya false.
+          - Field "children" berisi ID dari node yang menjadi turunan materi tersebut.
+          - Buat minimal 6-10 node yang tersusun dari Basic -> Intermediate -> Advanced.
+          - Pastikan semua node saling terhubung (tidak ada node yatim piatu selain root).
+
+        5. ATURAN ICON (PENTING):
+          - Gunakan library "MCI" (MaterialCommunityIcons) saja.
+          - Nama icon HANYA BOLEH memilih dari daftar aman ini (pilih yang paling relevan):
+            ["flag-checkered", "brain", "sitemap", "format-list-numbered", "database", "code-brackets", "book-open-variant", "chart-line", "language-python", "variable", "calculator", "call-split", "refresh", "function", "search-web", "sort-variant", "trophy", "laptop", "server", "web", "android", "apple", "rocket"]
+          - JANGAN MENGARANG nama icon lain (contoh: jangan tulis "flowchart", pakailah "sitemap").
+
+        CONTOH FORMAT YANG BENAR:
+        [
+          { 
+            "id": "root_intro", 
+            "name": "Pengenalan", 
+            "unlocked": true, 
+            "children": ["logic_basic"], 
+            "icon": { "lib": "MCI", "name": "flag-checkered" } 
+          },
+          { 
+            "id": "logic_basic", 
+            "name": "Logika Dasar", 
+            "unlocked": false, 
+            "children": ["vars", "loops"], 
+            "icon": { "lib": "MCI", "name": "brain" } 
+          },
+          { 
+            "id": "vars", 
+            "name": "Variabel", 
+            "unlocked": false, 
+            "children": [], 
+            "icon": { "lib": "MCI", "name": "variable" } 
+          },
+          { 
+            "id": "loops", 
+            "name": "Perulangan", 
+            "unlocked": false, 
+            "children": [], 
+            "icon": { "lib": "MCI", "name": "refresh" } 
+          }
+        ]
+      `;
+
+      const result = await model.generateContent(prompt);
+      const response = result.response;
+      const text = response.text();
+
+      const data = JSON.parse(text);
+
+
       if (!user) return;
       await addDoc(collection(db, "users", user.uid, "tasks"), {
         name: question,
         completed: false,
         createdAt: new Date(),
-        skillTreeData: DEFAULT_SKILL_TREE
+        skillTreeData: data,
       });
       if (Platform.OS === 'web') {
         navigation.navigate("Home");

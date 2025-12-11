@@ -74,6 +74,7 @@ function layoutAdaptive(flatSkills, rootId) {
       const lastChild = node.children[node.children.length - 1];
       node.position.x = (firstChild.position.x + lastChild.position.x) / 2;
     }
+    console.log(flatSkills);
   }
 
   const rootNode = nodeMap.get(rootId) || nodeMap.get(flatSkills[0]?.id);
@@ -232,6 +233,7 @@ export default function SkillTree({ route, navigation }) {
 
   const handleSkillTap = (tappedSkill) => {
     if (tappedSkill.unlocked) {
+      alert('INFO', `Skill "${tappedSkill.name}" sudah dikuasai!`);
       Alert.alert('INFO', `Skill "${tappedSkill.name}" sudah dikuasai!`);
       return;
     }
@@ -245,8 +247,10 @@ export default function SkillTree({ route, navigation }) {
       );
       setSkills(newSkills);
       saveProgressToFirestore(newSkills);
+      alert('SELAMAT!', `Kamu membuka skill: ${tappedSkill.name}`);
       Alert.alert('SELAMAT!', `Kamu membuka skill: ${tappedSkill.name}`);
     } else {
+      alert('TERKUNCI', 'Selesaikan skill sebelumnya!');
       Alert.alert('TERKUNCI', 'Selesaikan skill sebelumnya!');
     }
   };
