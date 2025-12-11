@@ -20,6 +20,7 @@
     "expo": "~54.0.27",
     "expo-asset": "~12.0.11",
     "expo-navigation-bar": "~5.0.10",
+    "expo-splash-screen": "~31.0.12",
     "expo-status-bar": "~3.0.9",
     "firebase": "^12.5.0",
     "react": "19.1.0",

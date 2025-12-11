@@ -14,15 +14,31 @@ import HomeScreen from './Screen/HomeScreen';
 import SkillTree from './Screen/SkillTree';
 import AskPage from './Screen/AskPage'; // <--- Halaman Tambahan
 
+// Impor Custom Splash buatan kita
+import CustomSplash from './Screen/CustomSplash';
+
 // Buat "Stack" navigasi
 const Stack = createNativeStackNavigator();
 
 export default function App() {
+
   // State untuk menyimpan data user yang sedang login
   const [currentUser, setCurrentUser] = useState(null);
 
   // State untuk mengecek status loading awal
   const [isLoading, setIsLoading] = useState(true);
+
+  // State untuk splash kedua (splash custom setelah splash bawaan Expo)
+  const [showCustomSplash, setShowCustomSplash] = useState(true);
+
+  // Gunakan effect untuk menyembunyikan splash custom
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowCustomSplash(false);
+    }, 2000); // lama splash kedua (2 detik)
+
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     // Cek apakah user sudah login sebelumnya di memori HP
@@ -33,6 +49,14 @@ export default function App() {
 
     return () => unsubscribe();
   }, []);
+
+  // ================
+  // SPLASH 2: tampilkan splash manual sebelum semuanya
+  // (Hooks sudah terpanggil duluan, jadi aman)
+  // ================
+  if (showCustomSplash) {
+    return <CustomSplash />;
+  }
 
   // Tampilkan Loading Spinner saat aplikasi baru dibuka (cek login)
   if (isLoading) {
