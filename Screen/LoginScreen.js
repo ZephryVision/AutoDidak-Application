@@ -1,20 +1,11 @@
 import React, { useState } from "react";
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  ImageBackground, // Komponen utama untuk wallpaper
-  StyleSheet,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  TouchableWithoutFeedback,
-  Keyboard,
-  ActivityIndicator
+import {
+  View, Text, TextInput, TouchableOpacity, ImageBackground,
+  StyleSheet, Alert, KeyboardAvoidingView, Platform,
+  ActivityIndicator, ScrollView 
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { auth } from '../firebaseConfig'; // Mundur satu folder untuk cari config
+import { auth } from '../firebaseConfig';
 import { signInWithEmailAndPassword } from "firebase/auth";
 
 export default function LoginScreen({ navigation }) {
@@ -35,7 +26,6 @@ export default function LoginScreen({ navigation }) {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       console.log('Login sukses:', userCredential.user.email);
       setLoading(false);
-      // Pindah ke Home (Daftar Tugas) dan reset history agar tidak bisa back ke login
       navigation.replace("Home");
     } catch (error) {
       setLoading(false);
@@ -45,9 +35,8 @@ export default function LoginScreen({ navigation }) {
   };
 
   return (
-    // FIX: Gunakan '../assets/' karena file ini ada di dalam folder 'Screen'
     <ImageBackground
-      source={require("../assets/beglon.png")} 
+      source={require("../assets/beglon.png")}
       style={styles.container}
       resizeMode="cover"
     >
@@ -55,13 +44,14 @@ export default function LoginScreen({ navigation }) {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        {/* --- PERBAIKAN DI SINI --- */}
+        {/* Ganti TouchableWithoutFeedback dengan ScrollView */}
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.overlay}>
-            
-            {/* Tombol Kembali (Opsional) */}
-            {/* <TouchableOpacity style={styles.backIcon} onPress={() => navigation.goBack()}>
-              <Ionicons name="arrow-back" size={26} color="black" />
-            </TouchableOpacity> */}
 
             {/* Judul */}
             <View style={styles.titleWrapper}>
@@ -73,7 +63,7 @@ export default function LoginScreen({ navigation }) {
             <View style={styles.formContainer}>
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Email</Text>
-                <TextInput 
+                <TextInput
                   style={styles.input}
                   placeholder="Masukkan email"
                   placeholderTextColor="#666"
@@ -99,17 +89,17 @@ export default function LoginScreen({ navigation }) {
                     onPress={() => setShowPassword(!showPassword)}
                     style={styles.eyeIcon}
                   >
-                    <Ionicons 
-                      name={showPassword ? "eye" : "eye-off"} 
-                      size={22} 
-                      color="black" 
+                    <Ionicons
+                      name={showPassword ? "eye" : "eye-off"}
+                      size={22}
+                      color="black"
                     />
                   </TouchableOpacity>
                 </View>
               </View>
 
               {/* Tombol Login */}
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.button}
                 onPress={handleLogin}
                 disabled={loading}
@@ -131,7 +121,8 @@ export default function LoginScreen({ navigation }) {
             </View>
 
           </View>
-        </TouchableWithoutFeedback>
+        </ScrollView>
+        {/* --- AKHIR PERBAIKAN --- */}
       </KeyboardAvoidingView>
     </ImageBackground>
   );
@@ -140,18 +131,14 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    width: '100%',
+    width: '100%', // Pastikan width 100%
     height: '100%',
+    alignSelf: 'center'
   },
   overlay: {
     flex: 1,
-    paddingTop: 180, // Sesuaikan agar pas dengan desain gambar
-  },
-  backIcon: {
-    position: "absolute",
-    top: 50,
-    left: 20,
-    zIndex: 10,
+    paddingTop: 180,
+    paddingBottom: 50, // Tambahan padding bawah agar enak di-scroll
   },
   titleWrapper: {
     alignItems: "center",
@@ -169,8 +156,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   formContainer: {
-    // Container form transparan (polosan)
-    paddingHorizontal: 0, 
+    paddingHorizontal: 0,
   },
   inputContainer: {
     marginTop: 20,
@@ -186,8 +172,7 @@ const styles = StyleSheet.create({
     borderColor: "black",
     paddingVertical: 10,
     fontSize: 16,
-    // Background sedikit putih transparan agar teks terbaca jelas di atas gambar
-    backgroundColor: 'rgba(255, 255, 255, 0.4)', 
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
     paddingHorizontal: 5,
   },
   eyeIcon: {
@@ -203,7 +188,6 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     alignItems: "center",
     borderWidth: 2,
-    // Shadow untuk efek timbul
     shadowColor: '#000',
     shadowOpacity: 0.2,
     shadowRadius: 5,

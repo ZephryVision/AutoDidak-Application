@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from "react"; 
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  Image, 
-  ImageBackground, 
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  ImageBackground,
   TouchableOpacity,
   TextInput,
   KeyboardAvoidingView,
@@ -12,10 +12,15 @@ import {
   ScrollView,
   Keyboard,
   Dimensions,
-  Alert // Import Alert
+  Alert
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { db, auth } from '../firebaseConfig';
+import {
+  collection, addDoc, onSnapshot, query, doc, updateDoc, deleteDoc
+} from "firebase/firestore";
+import { signOut } from 'firebase/auth';
 
 const { width, height } = Dimensions.get('window');
 
@@ -29,8 +34,28 @@ export default function AskPage({ navigation }) {
     return () => { showSub.remove(); hideSub.remove(); };
   }, []);
 
-  const handleSubmit = () => {
-    // 1. Validasi Input Kosong
+  const DEFAULT_SKILL_TREE = [
+    { id: 'orientasi', name: 'Orientasi Awal', unlocked: true, children: ['algoritma_dasar', 'pemrograman_dasar'], icon: { lib: 'MCI', name: 'flag-checkered' } },
+    { id: 'algoritma_dasar', name: 'Algoritma & Logika', unlocked: false, children: ['representasi_algoritma', 'struktur_dasar_algoritma'], icon: { lib: 'MCI', name: 'brain' } },
+    { id: 'representasi_algoritma', name: 'Flowchart', unlocked: false, children: [], icon: { lib: 'MCI', name: 'file-tree' } },
+    { id: 'struktur_dasar_algoritma', name: 'Sekuensial', unlocked: false, children: ['struktur_data_fungsi'], icon: { lib: 'MCI', name: 'format-list-numbered' } },
+    { id: 'struktur_data_fungsi', name: 'Struktur Data', unlocked: false, children: ['list_array', 'dictionary_map', 'kompleksitas'], icon: { lib: 'MCI', name: 'database' } },
+    { id: 'list_array', name: 'List / Array', unlocked: false, children: [], icon: { lib: 'MCI', name: 'code-brackets' } },
+    { id: 'dictionary_map', name: 'Dictionary', unlocked: false, children: [], icon: { lib: 'MCI', name: 'book-open-page-variant' } },
+    { id: 'kompleksitas', name: 'Kompleksitas', unlocked: false, children: [], icon: { lib: 'MCI', name: 'chart-line' } },
+    { id: 'pemrograman_dasar', name: 'Sintaks Python', unlocked: false, children: ['variabel_tipe_data'], icon: { lib: 'MCI', name: 'language-python' } },
+    { id: 'variabel_tipe_data', name: 'Variabel', unlocked: false, children: ['operator'], icon: { lib: 'MCI', name: 'variable' } },
+    { id: 'operator', name: 'Operator', unlocked: false, children: ['percabangan'], icon: { lib: 'MCI', name: 'calculator' } },
+    { id: 'percabangan', name: 'Percabangan', unlocked: false, children: ['perulangan'], icon: { lib: 'MCI', name: 'call-split' } },
+    { id: 'perulangan', name: 'Perulangan', unlocked: false, children: ['fungsi'], icon: { lib: 'MCI', name: 'refresh' } },
+    { id: 'fungsi', name: 'Fungsi', unlocked: false, children: ['penerapan_algoritma'], icon: { lib: 'MCI', name: 'function' } },
+    { id: 'penerapan_algoritma', name: 'Studi Kasus', unlocked: false, children: ['searching', 'sorting'], icon: { lib: 'FA5', name: 'search' } },
+    { id: 'searching', name: 'Searching', unlocked: false, children: [], icon: { lib: 'IO', name: 'search-circle' } },
+    { id: 'sorting', name: 'Sorting', unlocked: false, children: ['proyek_mini'], icon: { lib: 'MCI', name: 'sort-variant' } },
+    { id: 'proyek_mini', name: 'FINAL PROJECT', unlocked: false, children: [], icon: { lib: 'MCI', name: 'trophy-award' } },
+  ];
+
+  const handleSubmit = async () => {
     if (question.trim() === "") {
       if (Platform.OS === 'web') {
         window.alert("Ups! Tulis pertanyaanmu dulu ya.");
@@ -39,20 +64,27 @@ export default function AskPage({ navigation }) {
       }
       return;
     }
-    
-    // 2. Logika Sukses (Dibedakan Web vs Native)
-    if (Platform.OS === 'web') {
-      // --- KHUSUS WEB ---
-      // Web tidak support tombol callback di Alert.alert standar
-      // Jadi kita pakai window.alert biasa, lalu langsung navigate
-      window.alert("Terkirim! Pertanyaanmu sudah dikirim ke sistem.");
-      navigation.navigate("Home");
-    } else {
-      // --- KHUSUS HP (ANDROID/IOS) ---
-      // Bisa pakai Alert cantik dengan tombol OK
-      Alert.alert("Terkirim!", "Pertanyaanmu sudah dikirim ke sistem.", [
-        { text: "OK", onPress: () => navigation.navigate("Home") }
-      ]);
+
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+      await addDoc(collection(db, "users", user.uid, "tasks"), {
+        name: question,
+        completed: false,
+        createdAt: new Date(),
+        skillTreeData: DEFAULT_SKILL_TREE
+      });
+      if (Platform.OS === 'web') {
+        navigation.navigate("Home");
+      } else {
+        Alert.alert("Terkirim!", "Pertanyaanmu sudah dikirim ke sistem.", [
+          { text: "OK", onPress: () => navigation.navigate("Home") }
+        ]);
+      }
+      setQuestion('');
+    } catch (e) {
+      Alert.alert('Error', 'Gagal menambah data');
+      console.log(e);
     }
   };
 
@@ -67,10 +99,10 @@ export default function AskPage({ navigation }) {
           style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          <ScrollView 
+          <ScrollView
             contentContainerStyle={[
-              styles.scrollContainer, 
-              { paddingBottom: isKeyboardVisible ? 20 : 0 } 
+              styles.scrollContainer,
+              { paddingBottom: isKeyboardVisible ? 20 : 0 }
             ]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
@@ -78,7 +110,7 @@ export default function AskPage({ navigation }) {
 
             {/* HEADER */}
             <View style={styles.header}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.backButton}
                 onPress={() => navigation.goBack()}
               >
@@ -89,7 +121,7 @@ export default function AskPage({ navigation }) {
             <View style={styles.contentWrapper}>
               <Text style={styles.title}>Mau nanya apa nih?</Text>
 
-              <Image 
+              <Image
                 source={require("../assets/robot.png")}
                 style={styles.robot}
                 resizeMode="contain"
@@ -126,26 +158,26 @@ export default function AskPage({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  bg: { 
+  bg: {
     flex: 1,
     width: '100%',
     height: '100%',
     position: 'absolute',
     left: 0, top: 0,
   },
-  
+
   scrollContainer: { flexGrow: 1 },
 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? 40 : 10, 
+    paddingTop: Platform.OS === 'android' ? 40 : 10,
     marginBottom: 10,
   },
 
   backButton: {
-    backgroundColor: 'rgba(255,255,255,0.8)', 
+    backgroundColor: 'rgba(255,255,255,0.8)',
     padding: 8,
     borderRadius: 20,
     elevation: 2,
@@ -162,7 +194,7 @@ const styles = StyleSheet.create({
     color: "#222",
     marginVertical: 15,
     textAlign: 'center',
-    backgroundColor: 'rgba(255,255,255,0.6)', 
+    backgroundColor: 'rgba(255,255,255,0.6)',
     paddingHorizontal: 15,
     paddingVertical: 5,
     borderRadius: 10,
@@ -225,7 +257,7 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 5,
   },
-  
+
   submitText: {
     fontSize: 18,
     fontWeight: "bold",
