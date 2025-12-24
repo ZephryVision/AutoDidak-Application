@@ -22,7 +22,7 @@ import {
   collection, addDoc, onSnapshot, query, doc, updateDoc, deleteDoc
 } from "firebase/firestore";
 
-const API_KEY = "AIzaSyCrvWK0dyIXxbPsfIl6wxJSGSnqmTxqPhQ";
+const API_KEY = "AIzaSyBQgNxjqDajcSbr-1d6UrtkbtLwTy0QUnM";
 const genAI = new GoogleGenerativeAI(API_KEY);
 
 
